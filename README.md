@@ -98,7 +98,7 @@ npm run start:prod
 The application will be available at:
 
 - **API**: http://localhost:3000
-- **Swagger Documentation**: http://localhost:3000/api/docs
+- **Swagger Documentation**: http://localhost:9091/api/docs
 
 ## 📚 API Endpoints
 
@@ -344,7 +344,7 @@ The collection includes:
 
 ```bash
 # 1. Register new user
-curl -X POST http://localhost:3000/api/v1/auth/register \
+curl -X POST http://localhost:9091/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test@example.com",
@@ -356,7 +356,7 @@ curl -X POST http://localhost:3000/api/v1/auth/register \
 # Response: User created with status: PENDING
 
 # 2. Try to login (should fail and resend verification)
-curl -X POST http://localhost:3000/api/v1/auth/login \
+curl -X POST http://localhost:9091/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test@example.com",
@@ -366,7 +366,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 # Response: 401 - Please verify your email...
 
 # 3. Verify email (get token from email)
-curl -X POST http://localhost:3000/api/v1/auth/verify-email \
+curl -X POST http://localhost:9091/api/v1/auth/verify-email \
   -H "Content-Type: application/json" \
   -d '{
     "token": "your_verification_token_from_email"
@@ -375,7 +375,7 @@ curl -X POST http://localhost:3000/api/v1/auth/verify-email \
 # Response: Email verified successfully
 
 # 4. Login again (should succeed)
-curl -X POST http://localhost:3000/api/v1/auth/login \
+curl -X POST http://localhost:9091/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test@example.com",
