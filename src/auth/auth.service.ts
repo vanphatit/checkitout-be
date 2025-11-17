@@ -94,7 +94,14 @@ export class AuthService {
       throw new ConflictException('User already exists');
     }
 
-    const user = await this.usersService.create(registerDto);
+    // Hash password before creating user
+    const hashedPassword = await bcrypt.hash(registerDto.password, 12);
+    const userData = {
+      ...registerDto,
+      password: hashedPassword,
+    };
+
+    const user = await this.usersService.create(userData);
 
     // Generate verification token and save to Redis
     const verificationToken = await this.jwtService.signAsync(
@@ -133,6 +140,8 @@ export class AuthService {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        phone: user.phone,
+        role: user.role,
         status: user.status,
       },
     };
@@ -223,7 +232,8 @@ export class AuthService {
     // Hash new password
     const hashedPassword = await bcrypt.hash(resetPasswordDto.newPassword, 10);
 
-    await this.usersService.update((user as any)._id.toString(), {
+    // Update password using internal method that accepts password field
+    await this.usersService.updateWithPassword((user as any)._id.toString(), {
       password: hashedPassword,
     });
 
@@ -333,7 +343,11 @@ export class AuthService {
   }
 
   private async generateTokens(user: UserDocument | any) {
-    const payload = { email: user.email, sub: user._id };
+    const payload = {
+      email: user.email,
+      sub: user._id,
+      role: user.role,
+    };
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
