@@ -2,11 +2,11 @@ import {
   Controller,
   Post,
   Body,
-  UseGuards,
   Req,
   Res,
   HttpCode,
   HttpStatus,
+  Get,
 } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -18,10 +18,11 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   VerifyEmailDto,
+  ChangePasswordDto,
 } from './dto/auth.dto';
-import { LocalAuthGuard } from './guards/local-auth.guard';
 import { Auth } from '../common/decorators/auth.decorator';
 import { GetUser } from '../common/decorators/get-user.decorator';
+import { UserResponseDto } from '../users/dto/user.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -36,9 +37,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(
     @Body() loginDto: LoginDto,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.authService.login(loginDto);
+    const result = await this.authService.login(loginDto, request);
 
     // Set refresh token in HTTP-only cookie
     response.cookie('refreshToken', result.refreshToken, {
@@ -111,6 +113,18 @@ export class AuthController {
     return this.authService.logout(user.userId);
   }
 
+  @ApiOperation({ summary: 'Change password' })
+  @ApiResponse({ status: 200, description: 'Password updated successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid current password' })
+  @Auth()
+  @Post('change-password')
+  async changePassword(
+    @GetUser() user: any,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(user.userId, changePasswordDto);
+  }
+
   @ApiOperation({ summary: 'Forgot password' })
   @ApiResponse({ status: 200, description: 'Reset email sent if user exists' })
   @Throttle({ default: { limit: 3, ttl: 300000 } }) // 3 attempts per 5 minutes
@@ -141,5 +155,20 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
     return this.authService.verifyEmail(verifyEmailDto);
+  }
+
+  @ApiOperation({ summary: 'Get authenticated user info' })
+  @ApiResponse({
+    status: 200,
+    description: 'Authenticated user retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @Auth()
+  @Get('me')
+  async getCurrentUser(
+    @GetUser() user: any,
+  ): Promise<{ user: UserResponseDto }> {
+    const currentUser = await this.authService.getCurrentUser(user.userId);
+    return { user: currentUser };
   }
 }

@@ -6,6 +6,10 @@ import {
   UseGuards,
   Put,
   Param,
+  Delete,
+  NotFoundException,
+  Query,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -19,7 +23,14 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { UserRole } from './enums/user-role.enum';
 import { UsersService } from './users.service';
-import { UpdateUserDto, UserResponseDto } from './dto/user.dto';
+import {
+  CreateUserDto,
+  UpdateUserDto,
+  UserResponseDto,
+} from './dto/user.dto';
+import { UserActivityResponseDto } from './dto/user-activity.dto';
+import { GetUsersQueryDto } from './dto/get-users-query.dto';
+import * as bcrypt from 'bcryptjs';
 
 @ApiTags('Users')
 @Controller('users')
@@ -27,6 +38,8 @@ import { UpdateUserDto, UserResponseDto } from './dto/user.dto';
 @ApiBearerAuth('JWT-auth')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
+
+  // Region: Self-service endpoints
 
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({
@@ -37,20 +50,9 @@ export class UsersController {
   async getProfile(@GetUser() user: any): Promise<UserResponseDto> {
     const userDoc = await this.usersService.findById(user.userId);
     if (!userDoc) {
-      throw new Error('User not found');
+      throw new NotFoundException('User not found');
     }
-    return {
-      id: (userDoc._id as any).toString(),
-      email: userDoc.email,
-      firstName: userDoc.firstName,
-      lastName: userDoc.lastName,
-      phone: userDoc.phone,
-      role: userDoc.role,
-      status: userDoc.status,
-      roleData: userDoc.roleData,
-      createdAt: userDoc.createdAt!,
-      updatedAt: userDoc.updatedAt!,
-    };
+    return this.usersService.toResponseDto(userDoc);
   }
 
   @ApiOperation({ summary: 'Update current user profile' })
@@ -66,67 +68,9 @@ export class UsersController {
     const updatedUser = await this.usersService.update(
       user.userId,
       updateUserDto,
+      { actorId: user.userId },
     );
-    return {
-      id: (updatedUser._id as any).toString(),
-      email: updatedUser.email,
-      firstName: updatedUser.firstName,
-      lastName: updatedUser.lastName,
-      phone: updatedUser.phone,
-      role: updatedUser.role,
-      status: updatedUser.status,
-      roleData: updatedUser.roleData,
-      createdAt: updatedUser.createdAt!,
-      updatedAt: updatedUser.updatedAt!,
-    };
-  }
-
-  // Admin only endpoints
-  @ApiOperation({ summary: 'Get all users (Admin only)' })
-  @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
-  @ApiResponse({ status: 403, description: 'Access denied' })
-  @Get()
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
-  async getAllUsers(): Promise<UserResponseDto[]> {
-    const users = await this.usersService.findAll();
-    return users.map((user) => ({
-      id: (user._id as any).toString(),
-      email: user.email,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      phone: user.phone,
-      role: user.role,
-      status: user.status,
-      roleData: user.roleData,
-      createdAt: user.createdAt!,
-      updatedAt: user.updatedAt!,
-    }));
-  }
-
-  @ApiOperation({ summary: 'Update user by ID (Admin only)' })
-  @ApiResponse({ status: 200, description: 'User updated successfully' })
-  @ApiResponse({ status: 403, description: 'Access denied' })
-  @Put(':id')
-  @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN)
-  async updateUser(
-    @Param('id') id: string,
-    @Body() updateUserDto: UpdateUserDto,
-  ): Promise<UserResponseDto> {
-    const updatedUser = await this.usersService.update(id, updateUserDto);
-    return {
-      id: (updatedUser._id as any).toString(),
-      email: updatedUser.email,
-      firstName: updatedUser.firstName,
-      lastName: updatedUser.lastName,
-      phone: updatedUser.phone,
-      role: updatedUser.role,
-      status: updatedUser.status,
-      roleData: updatedUser.roleData,
-      createdAt: updatedUser.createdAt!,
-      updatedAt: updatedUser.updatedAt!,
-    };
+    return this.usersService.toResponseDto(updatedUser);
   }
 
   // Seller specific endpoints
@@ -161,5 +105,131 @@ export class UsersController {
       role: user.role,
       availableActions: ['create', 'update', 'read'],
     };
+  }
+
+  // Admin only endpoints
+  @ApiOperation({ summary: 'Get all users (Admin only)' })
+  @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @Get()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getAllUsers(
+    @Query() query: GetUsersQueryDto,
+  ): Promise<{
+    items: UserResponseDto[];
+    meta: { total: number; page: number; limit: number; totalPages: number };
+  }> {
+    const result = await this.usersService.findAllPaginated(query);
+    return {
+      items: result.items.map((user) => this.usersService.toResponseDto(user)),
+      meta: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages,
+      },
+    };
+  }
+
+  @ApiOperation({ summary: 'Create new user (Admin only)' })
+  @ApiResponse({ status: 201, description: 'User created successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @Post()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async createUser(
+    @GetUser() admin: any,
+    @Body() createUserDto: CreateUserDto,
+  ): Promise<UserResponseDto> {
+    const hashedPassword = await bcrypt.hash(createUserDto.password, 12);
+    const createdUser = await this.usersService.create(
+      {
+        ...createUserDto,
+        password: hashedPassword,
+      },
+      { actorId: admin.userId },
+    );
+
+    return this.usersService.toResponseDto(createdUser);
+  }
+
+  @ApiOperation({ summary: 'Get user activities (Admin or owner)' })
+  @ApiResponse({ status: 200, description: 'Activities retrieved successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @Get(':id/activities')
+  async getUserActivities(
+    @Param('id') id: string,
+    @GetUser() currentUser: any,
+    @Query('limit') limit?: string,
+  ): Promise<UserActivityResponseDto[]> {
+    if (currentUser.role !== UserRole.ADMIN && currentUser.userId !== id) {
+      throw new ForbiddenException('Access denied');
+    }
+    const parsedLimit = limit ? Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200) : 50;
+    const activities = await this.usersService.getUserActivities(
+      id,
+      parsedLimit,
+    );
+
+    return activities.map((activity) => ({
+      id: (activity._id as any).toString(),
+      userId: (activity.user as any).toString(),
+      action: activity.action,
+      performedBy: activity.performedBy
+        ? (activity.performedBy as any).toString()
+        : undefined,
+      metadata: activity.metadata,
+      description: activity.description,
+      ipAddress: activity.ipAddress,
+      device: activity.device,
+      createdAt: activity.createdAt!,
+    }));
+  }
+
+  @ApiOperation({ summary: 'Get user by ID (Admin only)' })
+  @ApiResponse({ status: 200, description: 'User retrieved successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @Get(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getUserById(@Param('id') id: string): Promise<UserResponseDto> {
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.usersService.toResponseDto(user);
+  }
+
+  @ApiOperation({ summary: 'Update user by ID (Admin only)' })
+  @ApiResponse({ status: 200, description: 'User updated successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @Put(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async updateUser(
+    @Param('id') id: string,
+    @GetUser() admin: any,
+    @Body() updateUserDto: UpdateUserDto,
+  ): Promise<UserResponseDto> {
+    const updatedUser = await this.usersService.update(id, updateUserDto, {
+      actorId: admin.userId,
+    });
+    return this.usersService.toResponseDto(updatedUser);
+  }
+
+  @ApiOperation({ summary: 'Delete user by ID (Admin only)' })
+  @ApiResponse({ status: 200, description: 'User deleted successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async deleteUser(
+    @Param('id') id: string,
+    @GetUser() admin: any,
+  ): Promise<{ message: string }> {
+    await this.usersService.delete(id, { actorId: admin.userId });
+    return { message: 'User removed successfully' };
   }
 }
