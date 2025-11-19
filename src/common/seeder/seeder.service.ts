@@ -99,43 +99,26 @@ export class SeederService {
 
     private async seedBuses(): Promise<any[]> {
         const busTypes = [
-            { type: 'giường nằm', seats: 34 },
-            { type: 'ghế ngồi', seats: 45 },
-            { type: 'limousine', seats: 28 },
-            { type: 'VIP', seats: 24 },
+            { type: 'SLEEPER', seats: 34 },
+            { type: 'SEATER', seats: 45 },
         ];
 
         const buses: any[] = [];
         for (let i = 0; i < 20; i++) {
             const busType = faker.helpers.arrayElement(busTypes);
             const licensePlate = this.generateLicensePlate();
-
-            // Generate seats
-            const seats: any[] = [];
-            for (let j = 1; j <= busType.seats; j++) {
-                seats.push({
-                    seatNumber: j.toString().padStart(2, '0'),
-                    isAvailable: true,
-                    price: faker.number.int({ min: 80000, max: 200000 }),
-                });
-            }
+            const busNo = `BUS${(i + 1).toString().padStart(3, '0')}`;
 
             const bus = new this.busModel({
-                licensePlate,
+                busNo,
+                plateNo: licensePlate,
                 type: busType.type,
-                capacity: busType.seats,
-                status: faker.helpers.arrayElement(['active', 'maintenance', 'inactive']),
-                seats,
-                facilities: faker.helpers.arrayElements([
-                    'WiFi', 'Air Conditioning', 'USB Charging', 'Reclining Seats',
-                    'Blanket', 'Water', 'Toilet', 'TV/Entertainment'
-                ], { min: 2, max: 5 }),
-                driver: {
-                    name: faker.person.fullName(),
-                    phone: this.generateVietnamesePhone(),
-                    licenseNumber: faker.string.alphanumeric(10).toUpperCase(),
-                },
-                isActive: true,
+                vacancy: busType.seats,
+                status: faker.helpers.arrayElement(['AVAILABLE', 'UNAVAILABLE']),
+                driverName: faker.person.fullName(),
+                seats: [], // Will be created separately in seat service
+                images: [],
+                createdBy: 'seeder'
             });
 
             buses.push(await bus.save());
@@ -228,26 +211,25 @@ export class SeederService {
                     arrivalDate.setDate(arrivalDate.getDate() + 1);
                 }
 
-                const totalSeats = bus.seats?.length || 0;
+                const totalSeats = bus.vacancy || 0;
                 const bookedSeats = faker.number.int({ min: 0, max: Math.floor(totalSeats * 0.8) });
 
                 const scheduling = new this.schedulingModel({
                     routeId: route._id.toString(),
-                    busId: bus._id.toString(),
-                    departureTime,
-                    arrivalTime,
-                    departureDate: currentDate.toISOString().split('T')[0],
-                    arrivalDate: arrivalDate.toISOString().split('T')[0],
+                    busIds: [bus._id.toString()],
+                    etd: departureTime,
+                    eta: arrivalTime,
+                    departureDate: currentDate,
+                    arrivalDate: arrivalDate,
                     price: (route.basePrice || 100000) + faker.number.int({ min: -20000, max: 50000 }),
                     driver: {
                         name: faker.person.fullName(),
                         phone: this.generateVietnamesePhone(),
                         licenseNumber: faker.string.alphanumeric(10).toUpperCase(),
                     },
-                    status: faker.helpers.arrayElement(['scheduled', 'in-transit', 'completed', 'cancelled']),
-                    totalSeats,
-                    bookedSeats,
+                    status: faker.helpers.arrayElement(['scheduled', 'in-progress', 'completed', 'cancelled']),
                     availableSeats: totalSeats - bookedSeats,
+                    bookedSeats,
                     isActive: true,
                 });
 

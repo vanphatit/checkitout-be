@@ -8,7 +8,7 @@ import { UserRole } from '../../users/enums/user-role.enum';
 
 @ApiTags('Seeder')
 @ApiBearerAuth()
-@Controller('api/v1/seeder')
+@Controller('seeder')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SeederController {
     constructor(private readonly seederService: SeederService) { }
