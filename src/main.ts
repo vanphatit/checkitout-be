@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 
@@ -20,6 +21,9 @@ async function bootstrap() {
 
   // Cookie parser for refresh tokens
   app.use(cookieParser());
+
+  // Global interceptors to return consistent response format
+  app.useGlobalInterceptors(new TransformInterceptor());
 
   // CORS configuration
   app.enableCors({
