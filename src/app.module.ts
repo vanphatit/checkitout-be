@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_FILTER, APP_PIPE } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -10,6 +12,12 @@ import { RedisModule } from './modules/redis/redis.module';
 import { EmailModule } from './modules/email/email.module';
 import { BusModule } from './bus/bus.module';
 import { SeatModule } from './seat/seat.module';
+import { StationModule } from './station/station.module';
+import { RouteModule } from './route/route.module';
+import { SchedulingModule } from './scheduling/scheduling.module';
+import { CommonModule } from './common/common.module';
+import { SeederModule } from './common/seeder/seeder.module';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 @Module({
   imports: [
@@ -28,12 +36,34 @@ import { SeatModule } from './seat/seat.module';
     ]),
     RedisModule,
     EmailModule,
+    CommonModule,
+    SeederModule,
     UsersModule,
     AuthModule,
     BusModule,
     SeatModule,
+    StationModule,
+    RouteModule,
+    SchedulingModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
+    {
+      provide: APP_PIPE,
+      useFactory: () => new ValidationPipe({
+        transform: true,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transformOptions: {
+          enableImplicitConversion: true,
+        },
+      }),
+    },
+  ],
 })
-export class AppModule {}
+export class AppModule { }
