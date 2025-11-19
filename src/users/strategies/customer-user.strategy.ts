@@ -27,11 +27,6 @@ export class CustomerUserStrategy implements IUserStrategy {
     return {
       ...userData,
       role: UserRole.CUSTOMER,
-      roleData: {
-        preferences: userData.roleData?.preferences || {},
-        shippingAddresses: [],
-        wishlist: [],
-      },
     };
   }
 
@@ -52,15 +47,6 @@ export class CustomerUserStrategy implements IUserStrategy {
     userData: UpdateUserDto,
     currentUser: UserDocument,
   ): Promise<Partial<UserDocument>> {
-    const updateData: Partial<UserDocument> = { ...userData };
-
-    if (userData.roleData) {
-      updateData.roleData = {
-        ...currentUser.roleData,
-        ...userData.roleData,
-      };
-    }
-
-    return updateData;
+    return { ...userData };
   }
 }

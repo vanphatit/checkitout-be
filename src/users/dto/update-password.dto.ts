@@ -15,5 +15,4 @@ export interface UserUpdateWithPassword {
   phone?: string;
   role?: string;
   status?: string;
-  roleData?: Record<string, any>;
 }

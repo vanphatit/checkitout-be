@@ -3,6 +3,7 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -13,12 +14,16 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
   VerifyEmailDto,
+  ChangePasswordDto,
 } from './dto/auth.dto';
 import { RedisService } from '../modules/redis/redis.service';
 import { EmailService } from '../modules/email/email.service';
 import { UserDocument, UserStatus } from '../users';
+import { UserResponseDto } from '../users/dto/user.dto';
+import { UserActivityAction } from '../users/enums/user-activity-action.enum';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
+import type { Request } from 'express';
 
 @Injectable()
 export class AuthService {
@@ -42,7 +47,7 @@ export class AuthService {
     return null;
   }
 
-  async login(loginDto: LoginDto) {
+  async login(loginDto: LoginDto, request?: Request) {
     const user = await this.validateUser(loginDto.email, loginDto.password);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
@@ -69,6 +74,14 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user);
 
+    const ipAddress = this.getClientIp(request);
+    const userAgent = request?.headers['user-agent'] as string | undefined;
+
+    await this.usersService.recordSuccessfulLogin((user._id as any).toString(), {
+      ipAddress,
+      device: userAgent,
+    });
+
     // Store refresh token in Redis
     await this.redisService.setWithExpiry(
       `refresh_token:${user._id}`,
@@ -76,14 +89,16 @@ export class AuthService {
       7 * 24 * 60 * 60, // 7 days
     );
 
+    const freshUser = await this.usersService.findById(
+      (user._id as any).toString(),
+    );
+
+    if (!freshUser) {
+      throw new NotFoundException('User not found');
+    }
+
     return {
-      user: {
-        id: user._id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        status: user.status,
-      },
+      user: this.usersService.toResponseDto(freshUser),
       ...tokens,
     };
   }
@@ -187,6 +202,39 @@ export class AuthService {
     return { message: 'Logged out successfully' };
   }
 
+  async changePassword(userId: string, changePasswordDto: ChangePasswordDto) {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const isCurrentValid = await this.usersService.validatePassword(
+      changePasswordDto.currentPassword,
+      user.password,
+    );
+
+    if (!isCurrentValid) {
+      throw new BadRequestException('Current password is incorrect');
+    }
+
+    const hashedPassword = await bcrypt.hash(changePasswordDto.newPassword, 12);
+
+    await this.usersService.updateWithPassword(
+      (user._id as any).toString(),
+      { password: hashedPassword },
+      {
+        actorId: (user._id as any).toString(),
+        activityAction: UserActivityAction.PASSWORD_CHANGED,
+        description: 'User changed their password',
+      },
+    );
+
+    // Invalidate refresh token to force re-login
+    await this.redisService.del(`refresh_token:${(user._id as any).toString()}`);
+
+    return { message: 'Password updated successfully' };
+  }
+
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
     const user = await this.usersService.findByEmail(forgotPasswordDto.email);
     if (!user) {
@@ -233,9 +281,17 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(resetPasswordDto.newPassword, 10);
 
     // Update password using internal method that accepts password field
-    await this.usersService.updateWithPassword((user as any)._id.toString(), {
-      password: hashedPassword,
-    });
+    await this.usersService.updateWithPassword(
+      (user as any)._id.toString(),
+      {
+        password: hashedPassword,
+      },
+      {
+        actorId: (user._id as any).toString(),
+        activityAction: UserActivityAction.PASSWORD_RESET,
+        description: 'Password reset via recovery flow',
+      },
+    );
 
     // Remove reset token from Redis
     await this.redisService.del(`reset_token:${resetPasswordDto.token}`);
@@ -288,7 +344,12 @@ export class AuthService {
     }
 
     // Update user status to ACTIVE
-    await this.usersService.update(userId, { status: UserStatus.ACTIVE });
+    await this.usersService.update(
+      userId,
+      { status: UserStatus.ACTIVE },
+      { actorId: userId },
+    );
+    await this.usersService.setEmailVerifiedTimestamp(userId);
 
     // Delete verification token from Redis
     await this.redisService.del(`email_verification:${token}`);
@@ -364,5 +425,31 @@ export class AuthService {
       accessToken,
       refreshToken,
     };
+  }
+
+  async getCurrentUser(userId: string): Promise<UserResponseDto> {
+    const user = await this.usersService.findById(userId);
+    if (!user || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('User not found or inactive');
+    }
+
+    return this.usersService.toResponseDto(user);
+  }
+
+  private getClientIp(request?: Request): string | undefined {
+    if (!request) {
+      return undefined;
+    }
+
+    const forwardedFor = request.headers['x-forwarded-for'];
+    if (typeof forwardedFor === 'string' && forwardedFor.length > 0) {
+      return forwardedFor.split(',')[0].trim();
+    }
+
+    if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
+      return forwardedFor[0];
+    }
+
+    return request.ip;
   }
 }

@@ -6,7 +6,6 @@ import {
   Matches,
   IsOptional,
   IsEnum,
-  IsObject,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../users/enums/user-role.enum';
@@ -66,14 +65,6 @@ export class RegisterDto {
   @IsEnum(UserRole)
   role?: UserRole;
 
-  @ApiPropertyOptional({
-    example: { businessName: 'My Store', preferences: { notifications: true } },
-    description:
-      'Role-specific data (business info for sellers, preferences for customers, etc.)',
-  })
-  @IsOptional()
-  @IsObject()
-  roleData?: Record<string, any>;
 }
 
 export class ForgotPasswordDto {
@@ -103,4 +94,19 @@ export class VerifyEmailDto {
   @ApiProperty({ example: 'email-verification-token-here' })
   @IsString()
   token: string;
+}
+
+export class ChangePasswordDto {
+  @ApiProperty({ example: 'CurrentPassword123!' })
+  @IsString()
+  currentPassword: string;
+
+  @ApiProperty({ example: 'NewPassword456!' })
+  @IsString()
+  @MinLength(8)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/, {
+    message:
+      'Password must contain at least 1 uppercase, 1 lowercase, 1 number and 1 special character',
+  })
+  newPassword: string;
 }

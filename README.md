@@ -14,6 +14,8 @@ A robust NestJS backend application with authentication, email verification, and
 - **MongoDB Integration**: Mongoose ODM with schema validation
 - **API Documentation**: Swagger/OpenAPI documentation
 - **Security**: CORS, validation pipes, HTTP-only cookies, status-based access control
+- **Role-Based Access Control**: Admins manage every user, sellers access seller-only routes, customers limited to profile actions
+- **User Activity Tracking**: Automatic audit trail for all user CRUD operations
 
 ## 📋 Prerequisites
 
@@ -43,7 +45,7 @@ A robust NestJS backend application with authentication, email verification, and
 
    ```env
    # Database
-   MONGODB_URI=mongodb://localhost:27017/checkitout
+   MONGODB_URI=mongodb://localhost:27017/checkitout_db
 
    # JWT Configuration
    JWT_ACCESS_SECRET=your-access-secret
@@ -110,9 +112,23 @@ The application will be available at:
 | POST   | `/register`        | User registration         | 3 req/5min |
 | POST   | `/refresh-token`   | Refresh access token      | Default    |
 | POST   | `/logout`          | User logout               | Default    |
+| POST   | `/change-password` | Change password (auth)    | Default    |
 | POST   | `/forgot-password` | Request password reset    | 3 req/5min |
 | POST   | `/reset-password`  | Reset password with token | 3 req/5min |
 | POST   | `/verify-email`    | Verify email address      | 10 req/min |
+
+### User Management (`/api/v1/users`)
+
+| Method | Endpoint                         | Description                                      | Access |
+| ------ | -------------------------------- | ------------------------------------------------ | ------ |
+| GET    | `/users/profile`                 | Get current authenticated profile                | Any authenticated user |
+| PUT    | `/users/profile`                 | Update your own profile                          | Any authenticated user |
+| GET    | `/users`                         | List every account                               | Admin only |
+| POST   | `/users`                         | Create a new user (password must be provided)    | Admin only |
+| GET    | `/users/:id`                     | Get details for a specific user                  | Admin only |
+| GET    | `/users/:id/activities?limit=50` | Review the recent activity log for an account    | Admin or owner |
+| PUT    | `/users/:id`                     | Update another user, including their role/status | Admin only |
+| DELETE | `/users/:id`                     | Remove a user                                    | Admin only |
 
 ### Request/Response Examples
 
@@ -202,6 +218,25 @@ Content-Type: application/json
 ```
 
 _Note: Refresh token is set as HTTP-only cookie for successful logins_
+
+## 👥 Default Seed Data
+
+On application boot the `UserSeedService` ensures a predictable set of users exists so you can log in immediately:
+
+| Role     | Email                   | Password    |
+| -------- | ----------------------- | ----------- |
+| ADMIN    | admin1@checkitout.com   | Admin123!   |
+| ADMIN    | admin2@checkitout.com   | Admin456!   |
+| SELLER   | seller1@checkitout.com  | Seller123!  |
+| SELLER   | seller2@checkitout.com  | Seller456!  |
+| SELLER   | seller3@checkitout.com  | Seller789!  |
+| CUSTOMER | user1@checkitout.com    | User123!    |
+| CUSTOMER | user2@checkitout.com    | User234!    |
+| CUSTOMER | user3@checkitout.com    | User345!    |
+| CUSTOMER | user4@checkitout.com    | User456!    |
+| CUSTOMER | user5@checkitout.com    | User567!    |
+
+Each record is created only if the email does not already exist in MongoDB. Use one of the admin accounts to test the user CRUD endpoints or to bootstrap new environments quickly.
 
 ## 🗃️ Database Schema
 

@@ -18,15 +18,6 @@ export class SellerUserStrategy implements IUserStrategy {
       );
     }
 
-    // Validate business information if provided
-    if (
-      userData.roleData?.businessName &&
-      userData.roleData.businessName.length < 3
-    ) {
-      throw new BadRequestException(
-        'Business name must be at least 3 characters',
-      );
-    }
   }
 
   async processCreationData(
@@ -35,12 +26,6 @@ export class SellerUserStrategy implements IUserStrategy {
     return {
       ...userData,
       role: UserRole.SELLER,
-      roleData: {
-        businessName: userData.roleData?.businessName || '',
-        businessType: userData.roleData?.businessType || 'Individual',
-        verificationStatus: 'PENDING',
-        storeSetup: false,
-      },
     };
   }
 
@@ -60,15 +45,6 @@ export class SellerUserStrategy implements IUserStrategy {
     userData: UpdateUserDto,
     currentUser: UserDocument,
   ): Promise<Partial<UserDocument>> {
-    const updateData: Partial<UserDocument> = { ...userData };
-
-    if (userData.roleData) {
-      updateData.roleData = {
-        ...currentUser.roleData,
-        ...userData.roleData,
-      };
-    }
-
-    return updateData;
+    return { ...userData };
   }
 }

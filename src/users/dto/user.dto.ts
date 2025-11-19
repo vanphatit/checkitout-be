@@ -5,7 +5,6 @@ import {
   MaxLength,
   IsOptional,
   IsEnum,
-  IsObject,
   Matches,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -45,12 +44,11 @@ export class CreateUserDto {
   @IsEnum(UserRole)
   role?: UserRole;
 
-  @ApiPropertyOptional({
-    example: { businessName: 'My Store', preferences: { theme: 'dark' } },
-  })
+  @ApiPropertyOptional({ enum: UserStatus, example: UserStatus.PENDING })
   @IsOptional()
-  @IsObject()
-  roleData?: Record<string, any>;
+  @IsEnum(UserStatus)
+  status?: UserStatus;
+
 }
 
 export class UpdateUserDto {
@@ -84,10 +82,6 @@ export class UpdateUserDto {
   @IsEnum(UserStatus)
   status?: UserStatus;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsObject()
-  roleData?: Record<string, any>;
 }
 
 export class UserResponseDto {
@@ -113,7 +107,13 @@ export class UserResponseDto {
   status: UserStatus;
 
   @ApiPropertyOptional()
-  roleData?: Record<string, any>;
+  emailVerifiedAt?: Date;
+
+  @ApiPropertyOptional()
+  lastLoginAt?: Date;
+
+  @ApiPropertyOptional()
+  lastLoginIp?: string;
 
   @ApiProperty()
   createdAt: Date;

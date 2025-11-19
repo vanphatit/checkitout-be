@@ -36,9 +36,14 @@ export class User {
   })
   status: UserStatus;
 
-  // Role-specific data
-  @Prop({ type: Object, default: {} })
-  roleData: Record<string, any>;
+  @Prop({ type: Date })
+  emailVerifiedAt?: Date;
+
+  @Prop({ type: Date })
+  lastLoginAt?: Date;
+
+  @Prop()
+  lastLoginIp?: string;
 
   createdAt?: Date;
   updatedAt?: Date;
