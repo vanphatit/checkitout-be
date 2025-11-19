@@ -8,6 +8,8 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { RedisModule } from './modules/redis/redis.module';
 import { EmailModule } from './modules/email/email.module';
+import { BusModule } from './bus/bus.module';
+import { SeatModule } from './seat/seat.module';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { EmailModule } from './modules/email/email.module';
     EmailModule,
     UsersModule,
     AuthModule,
+    BusModule,
+    SeatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
