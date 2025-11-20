@@ -57,22 +57,6 @@ export class UsersService {
     };
   }
 
-  private async logActivity(
-    userId: string,
-    action: UserActivityAction,
-    options?: UserOperationOptions,
-  ) {
-    await this.userActivityService.logActivity({
-      userId,
-      action,
-      performedBy: options?.actorId,
-      metadata: options?.metadata,
-      description: options?.description,
-      ipAddress: options?.ipAddress,
-      device: options?.device,
-    });
-  }
-
   async create(
     userData: CreateUserDto,
     options?: UserOperationOptions,
@@ -118,11 +102,11 @@ export class UsersService {
 
     const actorId = options?.actorId || (savedUser._id as any).toString();
 
-    await this.logActivity(
+    await this.userActivityService.logUserActivity(
       (savedUser._id as any).toString(),
       UserActivityAction.ACCOUNT_CREATED,
       {
-        actorId,
+        performedBy: actorId,
         description:
           actorId === (savedUser._id as any).toString()
             ? 'User registered an account'
@@ -172,8 +156,8 @@ export class UsersService {
       await this.setEmailVerifiedTimestamp(id);
     }
 
-    await this.logActivity(id, UserActivityAction.STATUS_CHANGED, {
-      actorId: options?.actorId,
+    await this.userActivityService.logUserActivity(id, UserActivityAction.STATUS_CHANGED, {
+      performedBy: options?.actorId,
       description: `Status updated to ${status}`,
       metadata: {
         previousStatus: existingUser.status,
@@ -233,8 +217,8 @@ export class UsersService {
         ? 'User updated their profile'
         : 'User updated by administrator';
 
-    await this.logActivity(id, baseAction, {
-      actorId,
+    await this.userActivityService.logUserActivity(id, baseAction, {
+      performedBy: actorId,
       description,
       metadata: {
         updatedFields,
@@ -242,8 +226,8 @@ export class UsersService {
     });
 
     if (updateData.role && updateData.role !== currentUser.role) {
-      await this.logActivity(id, UserActivityAction.ROLE_CHANGED, {
-        actorId,
+      await this.userActivityService.logUserActivity(id, UserActivityAction.ROLE_CHANGED, {
+        performedBy: actorId,
         description: `Role updated to ${updateData.role}`,
         metadata: {
           previousRole: currentUser.role,
@@ -253,8 +237,8 @@ export class UsersService {
     }
 
     if (updateData.status && updateData.status !== currentUser.status) {
-      await this.logActivity(id, UserActivityAction.STATUS_CHANGED, {
-        actorId,
+      await this.userActivityService.logUserActivity(id, UserActivityAction.STATUS_CHANGED, {
+        performedBy: actorId,
         description: `Status updated to ${updateData.status}`,
         metadata: {
           previousStatus: currentUser.status,
@@ -276,8 +260,8 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    await this.logActivity(id, UserActivityAction.USER_DELETED, {
-      actorId: options?.actorId,
+    await this.userActivityService.logUserActivity(id, UserActivityAction.USER_DELETED, {
+      performedBy: options?.actorId,
       description: 'User account deleted',
       metadata: {
         email: result.email,
@@ -387,8 +371,8 @@ export class UsersService {
       )
       .exec();
 
-    await this.logActivity(id, UserActivityAction.LOGIN_SUCCESS, {
-      actorId: id,
+    await this.userActivityService.logUserActivity(id, UserActivityAction.LOGIN_SUCCESS, {
+      performedBy: id,
       description: 'User logged in successfully',
       ipAddress: context?.ipAddress,
       device: context?.device,
@@ -417,8 +401,8 @@ export class UsersService {
     }
 
     if (options?.activityAction) {
-      await this.logActivity(id, options.activityAction, {
-        actorId: options.actorId,
+      await this.userActivityService.logUserActivity(id, options.activityAction, {
+        performedBy: options.actorId,
         description: options.description,
         ipAddress: options.ipAddress,
         device: options.device,
