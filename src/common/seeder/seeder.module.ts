@@ -6,6 +6,7 @@ import { Station, StationSchema } from '../../station/entities/station.entity';
 import { Route, RouteSchema } from '../../route/entities/route.entity';
 import { Scheduling, SchedulingSchema } from '../../scheduling/entities/scheduling.entity';
 import { Bus, BusSchema } from '../../bus/entities/bus.entity';
+import { Promotion, PromotionSchema } from 'src/promotion/entities/promotion.entity';
 
 @Module({
     imports: [
@@ -14,6 +15,7 @@ import { Bus, BusSchema } from '../../bus/entities/bus.entity';
             { name: Route.name, schema: RouteSchema },
             { name: Scheduling.name, schema: SchedulingSchema },
             { name: Bus.name, schema: BusSchema },
+            { name: Promotion.name, schema: PromotionSchema }
         ]),
     ],
     providers: [SeederService],

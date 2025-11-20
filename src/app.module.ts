@@ -12,6 +12,8 @@ import { RedisModule } from './modules/redis/redis.module';
 import { EmailModule } from './modules/email/email.module';
 import { BusModule } from './bus/bus.module';
 import { SeatModule } from './seat/seat.module';
+import { PromotionModule } from './promotion/promotion.module';
+// import { TicketModule } from './ticket/ticket.module';
 import { StationModule } from './station/station.module';
 import { RouteModule } from './route/route.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
@@ -45,6 +47,8 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     StationModule,
     RouteModule,
     SchedulingModule,
+    PromotionModule,
+    // TicketModule,
   ],
   controllers: [AppController],
   providers: [
