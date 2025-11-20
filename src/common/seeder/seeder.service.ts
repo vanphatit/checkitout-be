@@ -6,6 +6,8 @@ import { Station } from '../../station/entities/station.entity';
 import { Route } from '../../route/entities/route.entity';
 import { Scheduling } from '../../scheduling/entities/scheduling.entity';
 import { Bus } from '../../bus/entities/bus.entity';
+import { Promotion } from '../../promotion/entities/promotion.entity';
+
 
 @Injectable()
 export class SeederService {
@@ -16,6 +18,7 @@ export class SeederService {
         @InjectModel(Route.name) private routeModel: Model<Route>,
         @InjectModel(Scheduling.name) private schedulingModel: Model<Scheduling>,
         @InjectModel(Bus.name) private busModel: Model<Bus>,
+        @InjectModel(Promotion.name) private promotionModel: Model<Promotion>,
     ) { }
 
     async seedAll(): Promise<void> {
@@ -36,6 +39,10 @@ export class SeederService {
             const schedulings = await this.seedSchedulings(routes, buses);
             this.logger.log(`✅ Đã tạo ${schedulings.length} lịch trình`);
 
+            const promotions = await this.seedPromotions(schedulings);
+            this.logger.log(`✅ Đã tạo ${promotions.length} promotion(s)`);
+
+
             this.logger.log('🎉 Seed dữ liệu hoàn thành!');
         } catch (error) {
             this.logger.error('❌ Lỗi khi seed dữ liệu:', error);
@@ -50,8 +57,38 @@ export class SeederService {
             this.routeModel.deleteMany({}),
             this.stationModel.deleteMany({}),
             this.busModel.deleteMany({}),
+            this.promotionModel.deleteMany({}),
         ]);
     }
+
+    private async seedPromotions(schedulings: any[]): Promise<any[]> {
+        const promos: any[] = [];
+        const now = new Date();
+
+        // Create a few sample promotions
+        for (let i = 0; i < 8; i++) {
+            // start within next 10 days
+            const start = new Date(now);
+            start.setDate(now.getDate() + faker.number.int({ min: 0, max: 10 }));
+
+            // expiry 3-20 days after start
+            const expiry = new Date(start);
+            expiry.setDate(start.getDate() + faker.number.int({ min: 3, max: 20 }));
+
+            const promo = new this.promotionModel({
+                name: `${faker.commerce.productAdjective()} Promo ${i + 1}`,
+                startDate: start,
+                expiryDate: expiry,
+                value: faker.number.int({ min: 5, max: 50 }),
+                createdBy: 'seeder'
+            });
+
+            promos.push(await promo.save());
+        }
+
+        return promos;
+    }
+
 
     private async seedStations(): Promise<any[]> {
         const vietnamCities = [
