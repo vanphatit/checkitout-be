@@ -325,6 +325,36 @@ All emails are HTML-formatted with responsive design.
 - **Mandatory Email Verification**: Users must verify email before login
 - **Automatic Email Resend**: Verification emails resent when PENDING users try to login
 
+## 🧾 User Activity Logging
+
+- `UserActivityService.logUserActivity(userId, action, options?)` is exported by `UsersModule` so any feature module can audit work that affects a user.
+- Common `options`: `performedBy` (actor user id), `description`, `metadata` (free-form JSON), `ipAddress`, `device`.
+- Extend `UserActivityAction` if you need a new, explicit action label for your module.
+
+Example usage inside another NestJS service:
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { UserActivityService } from '../users/user-activity.service';
+import { UserActivityAction } from '../users/enums/user-activity-action.enum';
+
+@Injectable()
+export class OrdersService {
+  constructor(
+    private readonly userActivityService: UserActivityService,
+  ) {}
+
+  async markOrderCompleted(orderId: string, userId: string, actorId: string) {
+    // ...order completion logic...
+    await this.userActivityService.logUserActivity(userId, UserActivityAction.USER_UPDATED, {
+      performedBy: actorId,
+      description: 'Order marked as completed',
+      metadata: { orderId },
+    });
+  }
+}
+```
+
 ## 🧪 Testing with Postman
 
 Import the Postman collection from `/postman/` directory:

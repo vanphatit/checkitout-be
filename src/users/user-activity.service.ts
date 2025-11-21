@@ -6,6 +6,15 @@ import {
   UserActivityDocument,
 } from './entities/user-activity.entity';
 import { LogUserActivityDto } from './dto/user-activity.dto';
+import { UserActivityAction } from './enums/user-activity-action.enum';
+
+export interface ActivityLogOptions {
+  performedBy?: string;
+  metadata?: Record<string, any>;
+  description?: string;
+  ipAddress?: string;
+  device?: string;
+}
 
 @Injectable()
 export class UserActivityService {
@@ -26,6 +35,22 @@ export class UserActivityService {
     });
 
     return activity.save();
+  }
+
+  async logUserActivity(
+    userId: string,
+    action: UserActivityAction,
+    options: ActivityLogOptions = {},
+  ): Promise<UserActivityDocument> {
+    return this.logActivity({
+      userId,
+      action,
+      performedBy: options.performedBy,
+      metadata: options.metadata,
+      description: options.description,
+      ipAddress: options.ipAddress,
+      device: options.device,
+    });
   }
 
   async getActivitiesForUser(
