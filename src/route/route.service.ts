@@ -52,6 +52,7 @@ export class RouteService {
                 name: createFromAutoDto.name,
                 stationIds: createFromAutoDto.stationIds.map(id => new Types.ObjectId(id)),
                 distance: routeInfo.distance,
+                etd: createFromAutoDto.etd,
                 estimatedDuration: routeInfo.duration,
                 description: createFromAutoDto.description,
                 basePrice: createFromAutoDto.basePrice,

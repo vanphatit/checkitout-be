@@ -29,7 +29,12 @@ export class SchedulingService {
             _id: { $in: createSchedulingDto.busIds.map(id => new Types.ObjectId(id)) }
         }).exec();
 
-        const totalSeats = buses.reduce((sum, bus) => sum + (bus.seats?.length || 0), 0);
+        const totalSeats = buses.reduce((sum, bus) => {
+            const seatCount = bus.seats?.length || bus.vacancy || 0;
+            return sum + seatCount;
+        }, 0);
+
+        const primaryBusId = createSchedulingDto.busIds[0];
 
         // Calculate ETA if not provided
         let eta = createSchedulingDto.eta;
@@ -54,6 +59,7 @@ export class SchedulingService {
         const newScheduling = new this.schedulingModel({
             ...createSchedulingDto,
             routeId: new Types.ObjectId(createSchedulingDto.routeId),
+            busId: primaryBusId ? new Types.ObjectId(primaryBusId) : undefined,
             busIds: createSchedulingDto.busIds.map(id => new Types.ObjectId(id)),
             departureDate: new Date(createSchedulingDto.departureDate),
             arrivalDate: arrivalDate ? new Date(arrivalDate) : undefined,
@@ -169,13 +175,17 @@ export class SchedulingService {
 
         if (updateSchedulingDto.busIds) {
             updateData.busIds = updateSchedulingDto.busIds;
+            updateData.busId = updateSchedulingDto.busIds[0];
 
             // Recalculate available seats
             const buses = await this.busModel.find({
                 _id: { $in: updateSchedulingDto.busIds.map(id => new Types.ObjectId(id)) }
             }).exec();
 
-            const totalSeats = buses.reduce((sum, bus) => sum + (bus.seats?.length || 0), 0);
+            const totalSeats = buses.reduce((sum, bus) => {
+                const seatCount = bus.seats?.length || bus.vacancy || 0;
+                return sum + seatCount;
+            }, 0);
             const currentScheduling = await this.schedulingModel.findById(id).exec();
             updateData.totalSeats = totalSeats;
             updateData.availableSeats = totalSeats - (currentScheduling?.bookedSeats || 0);

@@ -57,24 +57,24 @@ export class OpenStreetMapService {
      */
     private async withRetry<T>(fn: () => Promise<T>, context: string): Promise<T> {
         let lastError: any;
-        
+
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
                 return await fn();
             } catch (error) {
                 lastError = error;
                 console.warn(`${context} - Attempt ${attempt}/${this.maxRetries} failed:`, error.message);
-                
+
                 if (attempt === this.maxRetries) {
                     break;
                 }
-                
+
                 // Exponential backoff: 1s, 2s, 4s
                 const delay = Math.pow(2, attempt - 1) * 1000;
                 await this.sleep(delay);
             }
         }
-        
+
         // If all retries failed, return fallback or throw graceful error
         console.error(`${context} - All retry attempts failed, using fallback`);
         throw new BadRequestException(`${context} tạm thời không khả dụng. Vui lòng thử lại sau.`);
@@ -87,7 +87,7 @@ export class OpenStreetMapService {
         return this.withRetry(async () => {
             try {
                 const results = await this.geocoder.geocode(address);
-                
+
                 if (!results || results.length === 0) {
                     // Return fallback result instead of throwing error
                     console.warn(`No geocoding results found for: ${address}`);
@@ -231,7 +231,7 @@ export class OpenStreetMapService {
                     steps: 'true',
                 };
 
-                const response = await axios.get(url, { 
+                const response = await axios.get(url, {
                     params,
                     timeout: this.timeout,
                     headers: {
@@ -260,11 +260,11 @@ export class OpenStreetMapService {
             } catch (error) {
                 // Fallback to straight-line calculation
                 console.warn('OSRM routing failed, using straight-line calculation:', error.message);
-                
+
                 const start = waypoints[0];
                 const end = waypoints[waypoints.length - 1];
                 const distance = this.calculateDistance(start, end);
-                
+
                 return {
                     distance,
                     duration: distance * 1.5, // Estimate: 1.5 minutes per km
