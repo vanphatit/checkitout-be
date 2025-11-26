@@ -5,6 +5,8 @@ import { SchedulingController } from './scheduling.controller';
 import { Scheduling, SchedulingSchema } from './entities/scheduling.entity';
 import { Route, RouteSchema } from '../route/entities/route.entity';
 import { Bus, BusSchema } from '../bus/entities/bus.entity';
+import { ExcelProcessingService } from './services/excel-processing.service';
+import { ExcelImportService } from './services/excel-import.service';
 
 @Module({
     imports: [
@@ -15,7 +17,7 @@ import { Bus, BusSchema } from '../bus/entities/bus.entity';
         ]),
     ],
     controllers: [SchedulingController],
-    providers: [SchedulingService],
-    exports: [SchedulingService],
+    providers: [SchedulingService, ExcelProcessingService, ExcelImportService],
+    exports: [SchedulingService, ExcelProcessingService, ExcelImportService],
 })
 export class SchedulingModule { }

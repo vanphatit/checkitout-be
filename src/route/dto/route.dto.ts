@@ -1,6 +1,5 @@
-import { IsString, IsNotEmpty, IsArray, IsNumber, IsOptional, IsBoolean, IsMongoId, Min } from 'class-validator';
+import { IsString, IsNotEmpty, IsArray, IsNumber, IsOptional, IsBoolean, IsMongoId, Min, Matches } from 'class-validator';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
-import { Types } from 'mongoose';
 
 export class CreateRouteDto {
     @ApiProperty({ description: 'Tên tuyến đường (VD: Sài Gòn - Hồng Ngự)' })
@@ -17,6 +16,11 @@ export class CreateRouteDto {
     @IsNumber()
     @Min(0)
     distance: number;
+
+    @ApiProperty({ description: 'Giờ khởi hành tham chiếu (HH:mm)', example: '08:00' })
+    @IsString()
+    @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'ETD phải có định dạng HH:mm' })
+    etd: string;
 
     @ApiProperty({ description: 'Thời gian di chuyển dự kiến (phút)', required: false })
     @IsOptional()
@@ -81,6 +85,11 @@ export class CreateRouteFromAutoDto {
     @IsArray()
     @IsMongoId({ each: true })
     stationIds: string[];
+
+    @ApiProperty({ description: 'Giờ khởi hành tham chiếu (HH:mm)', example: '08:00' })
+    @IsString()
+    @Matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, { message: 'ETD phải có định dạng HH:mm' })
+    etd: string;
 
     @ApiProperty({ description: 'Mô tả tuyến đường', required: false })
     @IsOptional()

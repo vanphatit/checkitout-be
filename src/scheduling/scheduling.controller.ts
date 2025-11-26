@@ -8,19 +8,28 @@ import {
     Delete,
     Query,
     UseGuards,
+    UseInterceptors,
+    UploadedFile,
+    Res
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
 import { SchedulingService } from './scheduling.service';
 import { CreateSchedulingDto, UpdateSchedulingDto, CreateBulkSchedulingDto } from './dto/scheduling.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
+import { ExcelImportService } from './services/excel-import.service';
 
 @ApiTags('Scheduling')
 @Controller('scheduling')
 export class SchedulingController {
-    constructor(private readonly schedulingService: SchedulingService) { }
+    constructor(
+        private readonly schedulingService: SchedulingService,
+        private readonly excelImportService: ExcelImportService
+    ) { }
 
     @Post()
     @UseGuards(JwtAuthGuard, RolesGuard)
@@ -127,5 +136,68 @@ export class SchedulingController {
     @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
     remove(@Param('id') id: string) {
         return this.schedulingService.remove(id);
+    }
+
+    // Excel Import/Export Endpoints
+
+    @Post('import/excel')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.SELLER)
+    @UseInterceptors(FileInterceptor('file'))
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Import lịch trình từ file Excel' })
+    @ApiConsumes('multipart/form-data')
+    @ApiResponse({ status: 201, description: 'Import thành công' })
+    @ApiResponse({ status: 400, description: 'File Excel không hợp lệ' })
+    @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
+    async importFromExcel(@UploadedFile() file: Express.Multer.File) {
+        if (!file) {
+            throw new Error('Vui lòng chọn file Excel để upload');
+        }
+
+        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+            throw new Error('File phải có định dạng Excel (.xlsx hoặc .xls)');
+        }
+
+        return this.excelImportService.importFromExcel(file);
+    }
+
+    @Post('import/validate')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.SELLER)
+    @UseInterceptors(FileInterceptor('file'))
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Validate file Excel trước khi import' })
+    @ApiConsumes('multipart/form-data')
+    @ApiResponse({ status: 200, description: 'Validation thành công' })
+    @ApiResponse({ status: 400, description: 'File Excel không hợp lệ' })
+    async validateImport(@UploadedFile() file: Express.Multer.File) {
+        if (!file) {
+            throw new Error('Vui lòng chọn file Excel để validate');
+        }
+
+        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+            throw new Error('File phải có định dạng Excel (.xlsx hoặc .xls)');
+        }
+
+        return this.excelImportService.validateImportData(file);
+    }
+
+    @Get('export/template')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.SELLER)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Tải template Excel để import lịch trình' })
+    @ApiResponse({ status: 200, description: 'Template đã được tạo thành công' })
+    async downloadTemplate(@Res() res: Response) {
+        const buffer = await this.excelImportService.generateTemplate();
+
+        res.set({
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': 'attachment; filename="lich_trinh_template.xlsx"',
+            'Content-Length': buffer.length
+        });
+
+        res.send(buffer);
     }
 }
