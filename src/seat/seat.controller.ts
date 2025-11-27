@@ -20,7 +20,7 @@ import { BookSeatDto } from './dto/book-seat.dto';
 
 @Controller('/seats')
 export class SeatController {
-  constructor(private readonly seatService: SeatService) {}
+  constructor(private readonly seatService: SeatService) { }
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -29,7 +29,7 @@ export class SeatController {
     return this.seatService.addSeat(createSeatDto);
   }
 
-  @Get('/bus/:busId')
+  @Get('bus/:busId')
   findAll(
     @Param('busId') busId: string,
     @Query() paginationDto: PaginationDto,
@@ -45,26 +45,31 @@ export class SeatController {
     return this.seatService.getSeatByBusIdAndSeatNo(busId, seatNo);
   }
 
-  @Get(':busId/seat-details/:seatId')
-  async getSeatDetails(
-    @Param('busId') busId: string,
-    @Param('seatId') seatId: string,
-  ) {
-    return this.seatService.getSeatByBusIdAndSeatId(busId, seatId);
-  }
-
-  @Patch(':busId/seats/status')
+  @Patch('bus/:busId/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.SELLER, UserRole.ADMIN)
+  @Roles(UserRole.SELLER)
   async updateStatusBySeller(
     @Param('busId') busId: string,
     @Body() dto: UpdateSeatStatusDto,
   ) {
-    return this.seatService.updateSeatsBySeller(busId, dto.seatNos, dto.status);
+    return await this.seatService.sellSeatsBySeller(busId, dto.seatNos);
   }
 
-  @Post(':busId/seats/book')
+  @Post('bus/:busId/book')
   async bookSeats(@Param('busId') busId: string, @Body() dto: BookSeatDto) {
     return this.seatService.reserveSeatsByCustomer(busId, dto.seatNos);
+  }
+
+  @Patch('bus/:busId/confirm-seats-payment')
+  async confirmSeatsPayment(
+    @Param('busId') busId: string,
+    @Body() dto: BookSeatDto,
+  ) {
+    return this.seatService.confirmSeatsPayment(busId, dto.seatNos);
+  }
+
+  @Patch('bus/:busId/reset')
+  async resetSeats(@Param('busId') busId: string) {
+    return this.seatService.resetSeats(busId);
   }
 }

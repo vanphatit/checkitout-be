@@ -1,13 +1,9 @@
-import { IsString, IsEnum } from 'class-validator';
-import { SeatStatus } from '../enums/seat-status.enum';
+import { IsString, IsMongoId } from 'class-validator';
 
 export class CreateSeatDto {
   @IsString()
   seatNo: string;
 
-  @IsString()
+  @IsMongoId()
   busId: string;
-
-  @IsEnum(SeatStatus)
-  status: SeatStatus;
 }

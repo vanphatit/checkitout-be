@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import { SeatStatus } from '../enums/seat-status.enum';
 
 export type SeatDocument = Seat & Document;
@@ -11,6 +11,9 @@ export class Seat {
 
   @Prop({ enum: SeatStatus, default: SeatStatus.EMPTY })
   status: SeatStatus;
+
+  @Prop({ type: Types.ObjectId, ref: 'Bus', required: true })
+  busId: Types.ObjectId;
 
   readonly createdAt?: Date;
 

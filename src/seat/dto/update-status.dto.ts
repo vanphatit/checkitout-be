@@ -1,5 +1,5 @@
-import { CreateSeatDto } from './create-seat.dto';
-
-export class UpdateSeatStatusDto extends CreateSeatDto {
+import { IsArray } from 'class-validator';
+export class UpdateSeatStatusDto {
+  @IsArray()
   seatNos: string[];
 }
