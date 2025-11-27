@@ -1,0 +1,534 @@
+{
+	"info": {
+		"_postman_id": "dd9906c5-2ea7-4d18-9cb4-5570071e4f45",
+		"name": "CHECK!TOUT",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "38440076",
+		"_collection_link": "https://workfitai.postman.co/workspace/My-Workspace~35462e84-9b49-4552-8c8a-621227fc2a0a/collection/38440076-dd9906c5-2ea7-4d18-9cb4-5570071e4f45?action=share&source=collection_link&creator=38440076"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"email\": \"thanhnguyenql2904@gmail.com\",\r\n  \"password\": \"User@123\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/auth/login",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Register",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"email\": \"thanhnguyenql2904@gmail.com\",\r\n  \"password\": \"User@123\",\r\n  \"firstName\": \"Nguyen Chi\",\r\n  \"lastName\": \"Thanh\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/auth/register",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"register"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Bus",
+			"item": [
+				{
+					"name": "Get Buses",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI2OTE1ODIxMDM3MzI1OTMyMjdhNjIxNTMiLCJlbWFpbCI6InVzZXIzQGdtYWlsLmNvbSIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc2MzUyMzcxNiwiZXhwIjoxNzYzNTI3MzE2fQ.cpio0NwckObe3SoJW2y01xYRliMg48BCqIVQt1emMWY",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"Laptop XPS 13 (Test)\",\r\n    \"description\": \"Mẫu laptop siêu mỏng, nhẹ và cao cấp của Dell.\",\r\n    \"price\": 28500000,\r\n    \"countInStock\": 15,\r\n    \"image\": \"/images/dell-xps.jpg\",\r\n    \"category\": \"Laptop Văn Phòng\",\r\n    \"brand\": \"Dell\"\r\n}"
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/buses?page=1&limit=10",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"buses"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Find By Id",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRoYW5obmd1eWVucWwyOTA0QGdtYWlsLmNvbSIsInN1YiI6IjY5MWQ2YjE4YmNkOWY5MWE2MmM0NTRlZiIsInJvbGUiOiJDVVNUT01FUiIsImlhdCI6MTc2MzUzNTg2MiwiZXhwIjoxNzYzNTM2NzYyfQ.yCsHSrN0xqp77egYI92nE8uEtpVAGE6A2oW_ShhqIlQ",
+									"type": "string"
+								}
+							]
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:9091/api/v1/buses/691d6d03b15d55848144fac5",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"buses",
+								"691d6d03b15d55848144fac5"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Bus",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRoYW5obmd1eWVucWwyOTA0QGdtYWlsLmNvbSIsInN1YiI6IjY5MWQ2YjE4YmNkOWY5MWE2MmM0NTRlZiIsInJvbGUiOiJDVVNUT01FUiIsImlhdCI6MTc2MzUzNTg2MiwiZXhwIjoxNzYzNTM2NzYyfQ.yCsHSrN0xqp77egYI92nE8uEtpVAGE6A2oW_ShhqIlQ",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"busNo\": \"99 Long Distance Express\",\r\n  \"plateNo\": \"50D.999.88\",\r\n  \"type\": \"SLEEPER\",\r\n  \"vacancy\": 50,\r\n  \"driverName\": \"Pham Van Hai\",\r\n  \"images\": [\"long1.jpg\", \"long2.jpg\", \"long3.jpg\", \"long4.jpg\", \"long5.jpg\"]\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/buses",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"buses"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Bus",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRoYW5obmd1eWVucWwyOTA0QGdtYWlsLmNvbSIsInN1YiI6IjY5MWQ2YjE4YmNkOWY5MWE2MmM0NTRlZiIsInJvbGUiOiJDVVNUT01FUiIsImlhdCI6MTc2MzUzNTg2MiwiZXhwIjoxNzYzNTM2NzYyfQ.yCsHSrN0xqp77egYI92nE8uEtpVAGE6A2oW_ShhqIlQ",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"type\": \"SEATER\",\r\n  \"vacancy\": 50,\r\n  \"driverName\": \"Pham Van Ba\",\r\n  \"images\": [\"long1.jpg\", \"long2.jpg\", \"long3.jpg\", \"long4.jpg\", \"long5.jpg\"]\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/buses/691d6d03b15d55848144fac5",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"buses",
+								"691d6d03b15d55848144fac5"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Status",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRoYW5obmd1eWVucWwyOTA0QGdtYWlsLmNvbSIsInN1YiI6IjY5MWQ2YjE4YmNkOWY5MWE2MmM0NTRlZiIsInJvbGUiOiJDVVNUT01FUiIsImlhdCI6MTc2MzUzNTg2MiwiZXhwIjoxNzYzNTM2NzYyfQ.yCsHSrN0xqp77egYI92nE8uEtpVAGE6A2oW_ShhqIlQ",
+									"type": "string"
+								}
+							]
+						},
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"status\": \"UNAVAILABLE\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/buses/691d6d03b15d55848144fac5/status",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"buses",
+								"691d6d03b15d55848144fac5",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Buses",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "file",
+								"value": "",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/C:/Users/acer/Downloads/test_buses.xlsx"
+								}
+							]
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/buses/import",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"buses",
+								"import"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Seat",
+			"item": [
+				{
+					"name": "Add Seat",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InRoYW5obmd1eWVucWwyOTA0QGdtYWlsLmNvbSIsInN1YiI6IjY5MWQ2YjE4YmNkOWY5MWE2MmM0NTRlZiIsInJvbGUiOiJDVVNUT01FUiIsImlhdCI6MTc2MzUzNTg2MiwiZXhwIjoxNzYzNTM2NzYyfQ.yCsHSrN0xqp77egYI92nE8uEtpVAGE6A2oW_ShhqIlQ",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "file",
+								"value": "",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"seatNo\": \"A2\",\r\n    \"busId\": \"691d72454975c23e4d2e2216\",\r\n    \"status\": \"EMPTY\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/seats",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"seats"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Fetch Seats By Bus Id",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:9091/api/v1/seats/bus/691eb1670f72e47b4cd2ec19?page=2&limit=1",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"seats",
+								"bus",
+								"691eb1670f72e47b4cd2ec19"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "2"
+								},
+								{
+									"key": "limit",
+									"value": "1"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Book Seats",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"seatNos\": [\"A1\",\"A2\"]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/seats/bus/691eb1670f72e47b4cd2ec19/book",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"seats",
+								"bus",
+								"691eb1670f72e47b4cd2ec19",
+								"book"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Seats",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:9091/api/v1/seats/bus/691eb1670f72e47b4cd2ec19/reset",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"seats",
+								"bus",
+								"691eb1670f72e47b4cd2ec19",
+								"reset"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Sell Seats",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"seatNos\": [\"A1\"]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/seats/bus/691eb1670f72e47b4cd2ec1b/status",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"seats",
+								"bus",
+								"691eb1670f72e47b4cd2ec1b",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Confirm Payment",
+					"request": {
+						"method": "PATCH",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"seatNos\": [\"A1\",\"A2\"]\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:9091/api/v1/seats/bus/691eb1670f72e47b4cd2ec19/confirm-seats-payment",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "9091",
+							"path": [
+								"api",
+								"v1",
+								"seats",
+								"bus",
+								"691eb1670f72e47b4cd2ec19",
+								"confirm-seats-payment"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
