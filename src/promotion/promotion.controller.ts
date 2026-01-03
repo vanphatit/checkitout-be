@@ -5,9 +5,9 @@ import {
     Get, 
     Param,
     Patch,
-    Delete,
     UseGuards,
-    Query
+    Query, 
+    Req,
 } from '@nestjs/common';
 import { PromotionService } from './promotion.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
@@ -34,19 +34,27 @@ export class PromotionController {
   create(@Body() dto: CreatePromotionDto) {
     return this.promoService.create(dto);
   }
-    @Get()
-    @ApiOperation({ summary: 'List promotions (with pagination & filters)' })
-    @ApiQuery({ name: 'search', required: false, type: String })
-    @ApiQuery({ name: 'startDate', required: false, type: String, description: 'ISO date, filters promotions with startDate >= this date' })
-    @ApiQuery({ name: 'expiryDate', required: false, type: String, description: 'ISO date, filters promotions with expiryDate <= this date (inclusive end of day)' })
-    @ApiQuery({ name: 'page', required: false, type: Number })
-    @ApiQuery({ name: 'limit', required: false, type: Number })
-    @ApiQuery({ name: 'sortBy', required: false, type: String })
-    @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
-    @ApiOkResponse({ description: 'Paginated promotions result' })
-    findAll(@Query() paginationDto: PaginationDto): Promise<PaginatedResult<Promotion>> {
-      return this.promoService.findAll(paginationDto);
-    }
+  @Get()
+  @ApiOperation({ summary: 'List promotions (with pagination & filters)' })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'sortBy', required: false, type: String })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'] })
+  @ApiQuery({
+    name: 'isActive',
+    required: false,
+    type: Boolean,
+    description: 'ADMIN/SELLER only',
+  })
+  @ApiOkResponse({ description: 'Paginated promotions result' })
+  findAll(
+    @Query() paginationDto: PaginationDto,
+    @Req() req: any,
+  ): Promise<PaginatedResult<Promotion>> {
+    const role = req.user?.role; // undefined = GUEST
+    return this.promoService.findAll(paginationDto, role);
+  }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get promotion' })
@@ -63,11 +71,11 @@ export class PromotionController {
     return this.promoService.update(id, dto);
   }
 
-  @Delete(':id')
+  @Patch(':id/disable')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SELLER)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete promotion' })
+  @ApiOperation({ summary: 'Disable promotion' })
   remove(@Param('id') id: string) {
     return this.promoService.remove(id);
   }

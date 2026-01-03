@@ -65,4 +65,5 @@ export interface PaginatedResult<T> {
   totalPages: number;
   hasNextPage: boolean;
   hasPrevPage: boolean;
+  isActive?: boolean;
 }

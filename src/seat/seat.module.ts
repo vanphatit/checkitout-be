@@ -15,5 +15,6 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
   ],
   providers: [SeatService, JwtAuthGuard],
   controllers: [SeatController],
+  exports: [SeatService],
 })
 export class SeatModule {}
