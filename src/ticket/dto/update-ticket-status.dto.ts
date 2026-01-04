@@ -1,7 +1,7 @@
 import { IsEnum, IsOptional, IsString } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { TicketStatus } from '../enums/ticket-status.enum';
-
+import { PaymentMethod } from '../enums/payment-method.enum';
 
 export class UpdateTicketStatusDto {
   @ApiProperty({ 
@@ -17,4 +17,12 @@ export class UpdateTicketStatusDto {
   @IsOptional()
   @IsString()
   fallbackURL?: string;
+
+  @ApiPropertyOptional({ 
+    enum: PaymentMethod,
+    description: 'Payment method (admin/seller can update to CASH)' 
+  })
+  @IsOptional()
+  @IsEnum(PaymentMethod)
+  paymentMethod?: PaymentMethod;
 }

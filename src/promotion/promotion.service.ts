@@ -11,7 +11,9 @@ import { UserRole } from '../users/enums/user-role.enum';
 
 @Injectable()
 export class PromotionService {
-  constructor(@InjectModel(Promotion.name) private promoModel: Model<PromotionDocument>) {}
+  constructor(
+    @InjectModel(Promotion.name) private promoModel: Model<PromotionDocument>
+  ) {}
 
   async create(dto: CreatePromotionDto) {
     const start = new Date(dto.startDate);

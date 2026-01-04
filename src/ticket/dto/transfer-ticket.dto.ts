@@ -1,5 +1,5 @@
-import { IsNotEmpty, IsMongoId } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsMongoId, IsOptional, IsString, MaxLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TransferTicketDto {
   @ApiProperty({ 
@@ -17,4 +17,14 @@ export class TransferTicketDto {
   @IsNotEmpty()
   @IsMongoId()
   newSeatId: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Reason for transfer (optional)',
+    example: 'Customer requested schedule change due to personal emergency',
+    maxLength: 500
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 }
