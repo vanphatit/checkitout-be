@@ -3,16 +3,20 @@ import {
   IsEnum, 
   IsOptional, 
   IsString,
-  IsMongoId 
+  IsMongoId,
+  IsEmail
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMethod } from '../enums/payment-method.enum';
 
 export class CreateTicketDto {
-  @ApiProperty({ description: 'User ID', example: '507f1f77bcf86cd799439011' })
-  @IsNotEmpty()
-  @IsMongoId()
-  userId: string;
+  @ApiPropertyOptional({ 
+    description: 'Customer email (required for admin/seller, auto-filled for customer)',
+    example: 'customer@example.com' 
+  })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
 
   @ApiProperty({ description: 'Seat ID', example: '507f1f77bcf86cd799439012' })
   @IsNotEmpty()
@@ -27,10 +31,11 @@ export class CreateTicketDto {
   @ApiProperty({ 
     enum: PaymentMethod, 
     description: 'Payment method',
-    example: PaymentMethod.BANKING 
+    example: PaymentMethod.BANKING, 
+    default: PaymentMethod.BANKING
   })
   @IsEnum(PaymentMethod)
-  paymentMethod: PaymentMethod;
+  paymentMethod: PaymentMethod = PaymentMethod.BANKING;
 
   @ApiPropertyOptional({ 
     description: 'Fallback URL from payment gateway (for Banking method)',

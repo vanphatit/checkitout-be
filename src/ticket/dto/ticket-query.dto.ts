@@ -1,14 +1,26 @@
-import { IsOptional, IsEnum, IsMongoId, IsDateString } from 'class-validator';
+import { IsOptional, IsEnum, IsMongoId, IsDateString, IsString, Matches, IsEmail } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { TicketStatus } from '../enums/ticket-status.enum';
 import { PaymentMethod } from '../enums/payment-method.enum';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 
 export class TicketQueryDto extends PaginationDto {
-  @ApiPropertyOptional({ description: 'Filter by user ID' })
+  @ApiPropertyOptional({ 
+    description: 'Filter by customer email',
+    example: 'customer@example.com'
+  })
   @IsOptional()
-  @IsMongoId()
-  userId?: string;
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Filter by customer phone number',
+    example: '0901234567'
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9]{10,11}$/, { message: 'Phone must be 10-11 digits' })
+  phone?: string;
 
   @ApiPropertyOptional({ description: 'Filter by scheduling ID' })
   @IsOptional()

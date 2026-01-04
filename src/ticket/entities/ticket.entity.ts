@@ -5,9 +5,7 @@ import { PaymentMethod } from '../enums/payment-method.enum';
 
 export type TicketDocument = Ticket & Document;
 
-// ============================================
-// SNAPSHOT INTERFACES (để type-safe)
-// ============================================
+// Snapshot interfaces (giữ nguyên)
 export interface TicketSnapshot {
   seat: {
     seatId: string;
@@ -79,10 +77,26 @@ export class Ticket {
   paymentMethod: PaymentMethod;
 
   @Prop({ type: String })
-  fallbackURL?: string;
+  fallbackURL?: string; // URL callback từ VNPay
 
-  @Prop({ type: Types.ObjectId, ref: 'Payment' })
-  paymentId?: Types.ObjectId;
+  // ✅ VNPAY PAYMENT DETAILS
+  @Prop({ type: String, unique: true, sparse: true })
+  transactionId?: string; // vnp_TxnRef - Mã giao dịch unique
+
+  @Prop({ type: String })
+  vnpayTransactionNo?: string; // vnp_TransactionNo - Mã GD tại VNPay
+
+  @Prop({ type: String })
+  bankCode?: string; // vnp_BankCode
+
+  @Prop({ type: String })
+  responseCode?: string; // vnp_ResponseCode (00 = success)
+
+  @Prop({ type: String })
+  responseMessage?: string; // Message từ VNPay
+
+  @Prop({ type: Date })
+  paidAt?: Date; // Thời điểm thanh toán thành công
 
   // ============================================
   // PRICING & TIMING
@@ -106,10 +120,11 @@ export class Ticket {
   @Prop({ type: Types.ObjectId, ref: 'Ticket' })
   transferTicketId?: Types.ObjectId;
 
+  @Prop({ type: String })
+  transferDescription?: string;
+
   // ============================================
-  // 🔒 TRANSACTION SNAPSHOT
-  // Lưu thông tin tại thời điểm vé được xác nhận
-  // Không bị ảnh hưởng khi Seat/Scheduling/Promotion thay đổi
+  // SNAPSHOT
   // ============================================
   @Prop({ 
     type: Object, 
@@ -121,13 +136,12 @@ export class Ticket {
 
 export const TicketSchema = SchemaFactory.createForClass(Ticket);
 
-// ============================================
-// INDEXES
-// ============================================
+// Indexes
 TicketSchema.index({ userId: 1 });
 TicketSchema.index({ seatId: 1 });
 TicketSchema.index({ schedulingId: 1 });
 TicketSchema.index({ status: 1 });
 TicketSchema.index({ expiredTime: 1 });
+TicketSchema.index({ transactionId: 1 });
+TicketSchema.index({ transferTicketId: 1 }); 
 TicketSchema.index({ createdAt: -1 });
-TicketSchema.index({ 'snapshot.scheduling.departureDate': 1 }); // For reporting
