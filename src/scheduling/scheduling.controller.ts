@@ -22,13 +22,15 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { ExcelImportService } from './services/excel-import.service';
+import { SchedulingSearchService } from './services/scheduling-search.service';
 
 @ApiTags('Scheduling')
 @Controller('scheduling')
 export class SchedulingController {
     constructor(
         private readonly schedulingService: SchedulingService,
-        private readonly excelImportService: ExcelImportService
+        private readonly excelImportService: ExcelImportService,
+        private readonly schedulingSearchService: SchedulingSearchService,
     ) { }
 
     @Post()
@@ -56,17 +58,80 @@ export class SchedulingController {
     }
 
     @Get()
-    @ApiOperation({ summary: 'Lấy danh sách tất cả lịch trình' })
+    @ApiOperation({ summary: 'Lấy danh sách lịch trình với pagination và Elasticsearch' })
     @ApiResponse({ status: 200, description: 'Danh sách lịch trình' })
     @ApiQuery({ name: 'routeId', required: false, description: 'Lọc theo tuyến đường' })
     @ApiQuery({ name: 'date', required: false, description: 'Lọc theo ngày (YYYY-MM-DD)' })
     @ApiQuery({ name: 'status', required: false, description: 'Lọc theo trạng thái' })
-    findAll(
+    @ApiQuery({ name: 'query', required: false, description: 'Tìm kiếm theo tên tuyến đường' })
+    @ApiQuery({ name: 'page', required: false, description: 'Trang hiện tại (default: 1)' })
+    @ApiQuery({ name: 'limit', required: false, description: 'Số lượng mỗi trang (default: 10)' })
+    async findAll(
         @Query('routeId') routeId?: string,
         @Query('date') date?: string,
         @Query('status') status?: string,
+        @Query('query') query?: string,
+        @Query('page') page?: string,
+        @Query('limit') limit?: string,
     ) {
-        return this.schedulingService.findAll({ routeId, date, status });
+        const pageNum = parseInt(page || '1', 10);
+        const limitNum = parseInt(limit || '10', 10);
+
+        try {
+            // Try Elasticsearch first
+            const result = await this.schedulingSearchService.searchSchedulings({
+                query,
+                date,
+                status,
+                routeId,
+                page: pageNum,
+                limit: limitNum,
+            });
+
+            // Populate full scheduling data from MongoDB
+            const schedulingIds = result.schedulings.map(s => s._id);
+            const fullSchedulings = await this.schedulingService.findByIds(schedulingIds);
+
+            return {
+                data: fullSchedulings,
+                pagination: {
+                    total: result.total,
+                    page: pageNum,
+                    limit: limitNum,
+                    totalPages: Math.ceil(result.total / limitNum),
+                },
+            };
+        } catch (error) {
+            // Fallback to MongoDB if Elasticsearch fails
+            const schedulings = await this.schedulingService.findAll({ routeId, date, status });
+            return {
+                data: schedulings,
+                pagination: {
+                    total: schedulings.length,
+                    page: 1,
+                    limit: schedulings.length,
+                    totalPages: 1,
+                },
+            };
+        }
+    }
+
+    @Post('reindex')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Reindex tất cả scheduling vào Elasticsearch',
+        description: 'Xóa và tạo lại toàn bộ index scheduling trong Elasticsearch. Chỉ ADMIN có quyền.'
+    })
+    @ApiResponse({ status: 201, description: 'Reindex thành công' })
+    @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
+    async reindexSchedulings() {
+        await this.schedulingSearchService.reindexAll();
+        return {
+            success: true,
+            message: 'Đã reindex tất cả scheduling vào Elasticsearch',
+        };
     }
 
     @Get('available')
