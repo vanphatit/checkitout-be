@@ -48,7 +48,7 @@ export class Route {
 
     @Prop({
         min: [1, 'Thời gian ước tính phải lớn hơn 0 phút'],
-        max: [1440, 'Thời gian ước tính không quá 24 giờ']
+        max: [2880, 'Thời gian ước tính không quá 48 giờ']
     })
     estimatedDuration: number; // minutes
 

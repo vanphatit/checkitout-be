@@ -192,12 +192,12 @@ export class Scheduling {
     // Thông tin tự động từ tuyến đường
     @Prop({
         min: 1,
-        max: 1440 // 24 hours in minutes
+        max: 2880 // 48 hours in minutes
     })
     @IsOptional()
     @IsNumber({}, { message: 'Thời gian dự kiến phải là số' })
     @Min(1, { message: 'Thời gian dự kiến tối thiểu 1 phút' })
-    @Max(1440, { message: 'Thời gian dự kiến không được vượt quá 24 giờ' })
+    @Max(2880, { message: 'Thời gian dự kiến không được vượt quá 48 giờ' })
     estimatedDuration?: number; // Thời gian di chuyển dự kiến (phút)
 
     @Prop({

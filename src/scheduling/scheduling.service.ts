@@ -1,17 +1,22 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Scheduling, SchedulingDocument } from './entities/scheduling.entity';
 import { Route, RouteDocument } from '../route/entities/route.entity';
 import { Bus, BusDocument } from '../bus/entities/bus.entity';
 import { CreateSchedulingDto, UpdateSchedulingDto, CreateBulkSchedulingDto } from './dto/scheduling.dto';
+import { SchedulingSearchService } from './services/scheduling-search.service';
 
 @Injectable()
 export class SchedulingService {
+    private readonly logger = new Logger(SchedulingService.name);
+
     constructor(
         @InjectModel(Scheduling.name) private schedulingModel: Model<SchedulingDocument>,
         @InjectModel(Route.name) private routeModel: Model<RouteDocument>,
         @InjectModel(Bus.name) private busModel: Model<BusDocument>,
+        @Inject(forwardRef(() => SchedulingSearchService))
+        private schedulingSearchService: SchedulingSearchService,
     ) { }
 
     async create(createSchedulingDto: CreateSchedulingDto): Promise<Scheduling> {
@@ -69,7 +74,20 @@ export class SchedulingService {
             recurringEndDate: createSchedulingDto.recurringEndDate ? new Date(createSchedulingDto.recurringEndDate) : undefined,
         });
 
-        return await newScheduling.save();
+        const saved = await newScheduling.save();
+
+        // Index to Elasticsearch
+        try {
+            const populated = await this.schedulingModel
+                .findById(saved._id)
+                .populate('routeId', 'name')
+                .exec();
+            await this.schedulingSearchService.indexScheduling(populated);
+        } catch (error) {
+            this.logger.error('Failed to index scheduling to Elasticsearch:', error);
+        }
+
+        return saved;
     }
 
     async createBulk(createBulkDto: CreateBulkSchedulingDto): Promise<Scheduling[]> {
@@ -138,7 +156,16 @@ export class SchedulingService {
         return await this.schedulingModel
             .find(query)
             .populate('routeId', 'name distance estimatedDuration')
-            .populate('busIds', 'plateNumber seats status type')
+            .populate('busIds', 'plateNo seats status type')
+            .sort({ departureDate: 1, etd: 1 })
+            .exec();
+    }
+
+    async findByIds(ids: string[]): Promise<Scheduling[]> {
+        return await this.schedulingModel
+            .find({ _id: { $in: ids.map(id => new Types.ObjectId(id)) } })
+            .populate('routeId', 'name distance estimatedDuration')
+            .populate('busIds', 'plateNo seats status type')
             .sort({ departureDate: 1, etd: 1 })
             .exec();
     }
@@ -146,7 +173,13 @@ export class SchedulingService {
     async findOne(id: string): Promise<Scheduling> {
         const scheduling = await this.schedulingModel
             .findById(id)
-            .populate('routeId')
+            .populate({
+                path: 'routeId',
+                populate: {
+                    path: 'stationIds',
+                    select: 'name address location'
+                }
+            })
             .populate('busIds')
             .exec();
 

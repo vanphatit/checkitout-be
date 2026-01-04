@@ -20,6 +20,7 @@ import { RouteModule } from './route/route.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { CommonModule } from './common/common.module';
 import { SeederModule } from './common/seeder/seeder.module';
+import { SearchModule } from './modules/search/search.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 @Module({
@@ -41,6 +42,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     EmailModule,
     CommonModule,
     SeederModule,
+    SearchModule,
     UsersModule,
     AuthModule,
     BusModule,

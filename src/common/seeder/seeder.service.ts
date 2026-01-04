@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { faker } from '@faker-js/faker';
 import * as XLSX from 'xlsx';
 import * as path from 'path';
@@ -10,6 +10,8 @@ import { Route } from '../../route/entities/route.entity';
 import { Scheduling } from '../../scheduling/entities/scheduling.entity';
 import { Bus } from '../../bus/entities/bus.entity';
 import { Promotion } from '../../promotion/entities/promotion.entity';
+import { Seat } from '../../seat/entities/seat.entity';
+import { SchedulingSearchService } from '../../scheduling/services/scheduling-search.service';
 
 
 @Injectable()
@@ -22,6 +24,8 @@ export class SeederService {
         @InjectModel(Scheduling.name) private schedulingModel: Model<Scheduling>,
         @InjectModel(Bus.name) private busModel: Model<Bus>,
         @InjectModel(Promotion.name) private promotionModel: Model<Promotion>,
+        @InjectModel(Seat.name) private seatModel: Model<Seat>,
+        private schedulingSearchService: SchedulingSearchService,
     ) { }
 
     async seedAll(): Promise<void> {
@@ -45,6 +49,10 @@ export class SeederService {
             const promotions = await this.seedPromotions(schedulings);
             this.logger.log(`✅ Đã tạo ${promotions.length} promotion(s)`);
 
+            // Reindex Elasticsearch
+            this.logger.log('🔄 Đồng bộ dữ liệu với Elasticsearch...');
+            await this.schedulingSearchService.reindexAll();
+            this.logger.log('✅ Đã đồng bộ với Elasticsearch');
 
             this.logger.log('🎉 Seed dữ liệu hoàn thành!');
         } catch (error) {
@@ -61,6 +69,7 @@ export class SeederService {
             this.stationModel.deleteMany({}),
             this.busModel.deleteMany({}),
             this.promotionModel.deleteMany({}),
+            this.seatModel.deleteMany({}),
         ]);
     }
 
@@ -95,16 +104,142 @@ export class SeederService {
 
     private async seedStations(): Promise<any[]> {
         const vietnamCities = [
+            // South Vietnam - TP.HCM and surrounding
             { name: 'Bến xe Miền Đông', address: '292 Đinh Bộ Lĩnh, Bình Thạnh, TP.HCM', lat: 10.8142, lng: 106.7078 },
             { name: 'Bến xe Miền Tây', address: '395 Kinh Dương Vương, An Lạc, Bình Tân, TP.HCM', lat: 10.8231, lng: 106.6297 },
             { name: 'Bến xe An Sương', address: 'Quốc lộ 22, Tân Hưng Thuận, Quận 12, TP.HCM', lat: 10.8603, lng: 106.6192 },
-            { name: 'Bến xe Cần Thơ', address: '91 Nguyễn Trãi, An Phú, Ninh Kiều, Cần Thơ', lat: 10.0452, lng: 105.7469 },
+            { name: 'Trạm Củ Chi', address: 'Củ Chi, TP.HCM', lat: 10.9736, lng: 106.4935 },
+            { name: 'Trạm Bến Lức', address: 'Bến Lức, Long An', lat: 10.6456, lng: 106.4623 },
+            { name: 'Bến xe Long An', address: 'Tân An, Long An', lat: 10.5359, lng: 106.4056 },
             { name: 'Bến xe Mỹ Tho', address: 'Ấp Bến Phà, Tân Long, Mỹ Tho, Tiền Giang', lat: 10.3599, lng: 106.3601 },
+            { name: 'Trạm Cai Lậy', address: 'Cai Lậy, Tiền Giang', lat: 10.3739, lng: 106.1314 },
+            { name: 'Bến xe Cần Thơ', address: '91 Nguyễn Trãi, An Phú, Ninh Kiều, Cần Thơ', lat: 10.0452, lng: 105.7469 },
+            { name: 'Trạm Long Xuyên', address: 'Long Xuyên, An Giang', lat: 10.3861, lng: 105.4344 },
+
+            // Đồng Nai - Bà Rịa Vũng Tàu
+            { name: 'Bến xe Biên Hòa', address: 'Long Bình Tân, Biên Hòa, Đồng Nai', lat: 10.9470, lng: 106.8233 },
+            { name: 'Trạm Long Thành', address: 'Long Thành, Đồng Nai', lat: 10.7884, lng: 106.9794 },
+            { name: 'Trạm Xuân Lộc', address: 'Xuân Lộc, Đồng Nai', lat: 10.9261, lng: 107.4102 },
             { name: 'Bến xe Vũng Tàu', address: '52 Nam Kỳ Khởi Nghĩa, Phường 1, Vũng Tàu', lat: 10.3459, lng: 107.0843 },
+            { name: 'Trạm Bà Rịa', address: 'Bà Rịa, Bà Rịa - Vũng Tàu', lat: 10.5117, lng: 107.1839 },
+
+            // Bình Dương - Bình Phước
+            { name: 'Bến xe Bình Dương', address: 'QL13, Thủ Dầu Một, Bình Dương', lat: 10.9804, lng: 106.6519 },
+            { name: 'Trạm Dầu Tiếng', address: 'Dầu Tiếng, Bình Dương', lat: 11.3644, lng: 106.4378 },
+            { name: 'Trạm Chơn Thành', address: 'Chơn Thành, Bình Phước', lat: 11.4547, lng: 106.6022 },
+
+            // South Central - Route to Dalat
             { name: 'Bến xe Đà Lạt', address: '1 Tô Hiến Thành, Phường 3, Đà Lạt', lat: 11.9404, lng: 108.4583 },
+            { name: 'Trạm Di Linh', address: 'Di Linh, Lâm Đồng', lat: 11.5792, lng: 108.0867 },
+            { name: 'Trạm Đức Trọng', address: 'Đức Trọng, Lâm Đồng', lat: 11.7436, lng: 108.3694 },
+
+            // Bình Thuận - Ninh Thuận (QL1A South to Central)
+            { name: 'Trạm Hàm Tân', address: 'Hàm Tân, Bình Thuận', lat: 10.7311, lng: 107.7236 },
+            { name: 'Bến xe Phan Thiết', address: 'Hùng Vương, Phan Thiết, Bình Thuận', lat: 10.9280, lng: 108.1020 },
+            { name: 'Trạm La Gi', address: 'La Gi, Bình Thuận', lat: 10.6633, lng: 107.7736 },
+            { name: 'Trạm Thuận Nam', address: 'Thuận Nam, Ninh Thuận', lat: 11.2167, lng: 108.6167 },
+            { name: 'Bến xe Phan Rang', address: 'Phan Rang-Tháp Chàm, Ninh Thuận', lat: 11.5676, lng: 108.9899 },
+            { name: 'Trạm Ninh Phước', address: 'Ninh Phước, Ninh Thuận', lat: 11.8333, lng: 108.9833 },
+
+            // Khánh Hòa
+            { name: 'Bến xe Cam Ranh', address: 'Cam Ranh, Khánh Hòa', lat: 11.9214, lng: 109.1592 },
             { name: 'Bến xe Nha Trang', address: '58 Lê Hồng Phong, Phước Hòa, Nha Trang', lat: 12.2585, lng: 109.1967 },
-            { name: 'Bến xe Hà Nội', address: 'Giáp Bát, Hoàng Mai, Hà Nội', lat: 20.9735, lng: 105.8234 },
+            { name: 'Trạm Diên Khánh', address: 'Diên Khánh, Khánh Hòa', lat: 12.2500, lng: 109.0667 },
+            { name: 'Trạm Vạn Ninh', address: 'Vạn Ninh, Khánh Hòa', lat: 12.6833, lng: 109.1833 },
+
+            // Phú Yên
+            { name: 'Trạm Đông Hòa', address: 'Đông Hòa, Phú Yên', lat: 13.0500, lng: 109.2500 },
+            { name: 'Bến xe Tuy Hòa', address: 'Tuy Hòa, Phú Yên', lat: 13.0950, lng: 109.2967 },
+            { name: 'Trạm Sông Cầu', address: 'Sông Cầu, Phú Yên', lat: 13.4500, lng: 109.2167 },
+
+            // Bình Định
+            { name: 'Trạm Tuy Phước', address: 'Tuy Phước, Bình Định', lat: 13.5833, lng: 109.2000 },
+            { name: 'Bến xe Quy Nhơn', address: 'Trần Hưng Đạo, Quy Nhơn, Bình Định', lat: 13.7830, lng: 109.2196 },
+            { name: 'Trạm An Nhơn', address: 'An Nhơn, Bình Định', lat: 13.8667, lng: 109.1000 },
+            { name: 'Trạm Bồng Sơn', address: 'Bồng Sơn, Bình Định', lat: 14.1000, lng: 108.9333 },
+
+            // Quảng Ngãi
+            { name: 'Trạm Đức Phổ', address: 'Đức Phổ, Quảng Ngãi', lat: 14.7167, lng: 108.9167 },
+            { name: 'Bến xe Quảng Ngãi', address: 'Nguyễn Chánh, Quảng Ngãi', lat: 15.1214, lng: 108.8044 },
+            { name: 'Trạm Bình Sơn', address: 'Bình Sơn, Quảng Ngãi', lat: 15.3167, lng: 108.8667 },
+
+            // Quảng Nam
+            { name: 'Trạm Núi Thành', address: 'Núi Thành, Quảng Nam', lat: 15.4833, lng: 108.7167 },
+            { name: 'Bến xe Tam Kỳ', address: 'Tam Kỳ, Quảng Nam', lat: 15.5737, lng: 108.4745 },
+            { name: 'Trạm Điện Bàn', address: 'Điện Bàn, Quảng Nam', lat: 15.8667, lng: 108.2167 },
+            { name: 'Trạm Hội An', address: 'Hội An, Quảng Nam', lat: 15.8801, lng: 108.3380 },
+
+            // Đà Nẵng
             { name: 'Bến xe Đà Nẵng', address: '200 Tôn Đức Thắng, Hòa Minh, Liên Chiểu, Đà Nẵng', lat: 16.0544, lng: 108.2022 },
+
+            // Thừa Thiên Huế
+            { name: 'Trạm Phú Lộc', address: 'Phú Lộc, Thừa Thiên Huế', lat: 16.3000, lng: 107.9500 },
+            { name: 'Bến xe Huế', address: 'An Cựu, Huế, Thừa Thiên Huế', lat: 16.4637, lng: 107.5909 },
+            { name: 'Trạm Phong Điền', address: 'Phong Điền, Thừa Thiên Huế', lat: 16.4833, lng: 107.4167 },
+
+            // Quảng Trị
+            { name: 'Bến xe Đông Hà', address: 'Đông Hà, Quảng Trị', lat: 16.8198, lng: 107.1003 },
+            { name: 'Trạm Gio Linh', address: 'Gio Linh, Quảng Trị', lat: 16.9833, lng: 107.0333 },
+
+            // Quảng Bình
+            { name: 'Bến xe Đồng Hới', address: 'Đồng Hới, Quảng Bình', lat: 17.4833, lng: 106.6167 },
+            { name: 'Trạm Quảng Ninh', address: 'Quảng Ninh, Quảng Bình', lat: 17.6667, lng: 106.6333 },
+
+            // Hà Tĩnh
+            { name: 'Trạm Kỳ Anh', address: 'Kỳ Anh, Hà Tĩnh', lat: 18.0500, lng: 106.2667 },
+            { name: 'Bến xe Hà Tĩnh', address: 'Hà Tĩnh', lat: 18.3429, lng: 105.9053 },
+            { name: 'Trạm Hồng Lĩnh', address: 'Hồng Lĩnh, Hà Tĩnh', lat: 18.5167, lng: 105.6833 },
+
+            // Nghệ An
+            { name: 'Trạm Đô Lương', address: 'Đô Lương, Nghệ An', lat: 18.8000, lng: 105.4833 },
+            { name: 'Bến xe Vinh', address: 'Lê Lợi, Vinh, Nghệ An', lat: 18.6791, lng: 105.6810 },
+            { name: 'Trạm Diễn Châu', address: 'Diễn Châu, Nghệ An', lat: 19.0167, lng: 105.5833 },
+            { name: 'Trạm Quỳnh Lưu', address: 'Quỳnh Lưu, Nghệ An', lat: 19.2667, lng: 105.6667 },
+
+            // Thanh Hóa
+            { name: 'Trạm Tĩnh Gia', address: 'Tĩnh Gia, Thanh Hóa', lat: 19.6333, lng: 105.7667 },
+            { name: 'Bến xe Thanh Hóa', address: 'Thanh Hóa', lat: 19.8067, lng: 105.7851 },
+            { name: 'Trạm Bỉm Sơn', address: 'Bỉm Sơn, Thanh Hóa', lat: 20.0833, lng: 105.8500 },
+
+            // Ninh Bình - Nam Định
+            { name: 'Bến xe Ninh Bình', address: 'Ninh Bình', lat: 20.2506, lng: 105.9745 },
+            { name: 'Trạm Tam Điệp', address: 'Tam Điệp, Ninh Bình', lat: 20.2167, lng: 105.9167 },
+            { name: 'Bến xe Nam Định', address: 'Nam Định', lat: 20.4388, lng: 106.1621 },
+            { name: 'Trạm Giao Thủy', address: 'Giao Thủy, Nam Định', lat: 20.2833, lng: 106.4000 },
+
+            // Hà Nội
+            { name: 'Bến xe Hà Nội', address: 'Giáp Bát, Hoàng Mai, Hà Nội', lat: 20.9735, lng: 105.8234 },
+            { name: 'Bến xe Mỹ Đình', address: 'Mỹ Đình, Nam Từ Liêm, Hà Nội', lat: 21.0285, lng: 105.7805 },
+            { name: 'Bến xe Nước Ngầm', address: 'Giáp Bát, Hoàng Mai, Hà Nội', lat: 20.9816, lng: 105.8367 },
+            { name: 'Trạm Sơn Tây', address: 'Sơn Tây, Hà Nội', lat: 21.1333, lng: 105.5000 },
+
+            // Hưng Yên - Bắc Ninh - Bắc Giang
+            { name: 'Trạm Hưng Yên', address: 'Hưng Yên', lat: 20.6464, lng: 106.0511 },
+            { name: 'Bến xe Bắc Ninh', address: 'Bắc Ninh', lat: 21.1861, lng: 106.0763 },
+            { name: 'Bến xe Bắc Giang', address: 'Bắc Giang', lat: 21.2819, lng: 106.1946 },
+            { name: 'Trạm Lục Nam', address: 'Lục Nam, Bắc Giang', lat: 21.3167, lng: 106.4667 },
+
+            // Hải Dương - Hải Phòng - Quảng Ninh
+            { name: 'Bến xe Hải Dương', address: 'Hải Dương', lat: 20.9373, lng: 106.3148 },
+            { name: 'Bến xe Hải Phòng', address: 'Hải Phòng', lat: 20.8449, lng: 106.6881 },
+            { name: 'Trạm Uông Bí', address: 'Uông Bí, Quảng Ninh', lat: 21.0333, lng: 106.7667 },
+            { name: 'Bến xe Hạ Long', address: 'Hạ Long, Quảng Ninh', lat: 20.9559, lng: 107.0447 },
+            { name: 'Trạm Cẩm Phả', address: 'Cẩm Phả, Quảng Ninh', lat: 21.0167, lng: 107.3000 },
+
+            // Lạng Sơn - Cao Bằng
+            { name: 'Trạm Bắc Sơn', address: 'Bắc Sơn, Lạng Sơn', lat: 21.6833, lng: 106.4667 },
+            { name: 'Bến xe Lạng Sơn', address: 'Lạng Sơn', lat: 21.8537, lng: 106.7614 },
+            { name: 'Trạm Cao Lộc', address: 'Cao Lộc, Lạng Sơn', lat: 21.9167, lng: 106.7833 },
+
+            // Thái Nguyên
+            { name: 'Bến xe Thái Nguyên', address: 'Thái Nguyên', lat: 21.5671, lng: 105.8252 },
+            { name: 'Trạm Phổ Yên', address: 'Phổ Yên, Thái Nguyên', lat: 21.4167, lng: 105.8333 },
+
+            // Lào Cai - Yên Bái
+            { name: 'Bến xe Yên Bái', address: 'Yên Bái', lat: 21.7167, lng: 104.8667 },
+            { name: 'Trạm Văn Chấn', address: 'Văn Chấn, Yên Bái', lat: 21.5833, lng: 104.6167 },
+            { name: 'Bến xe Lào Cai', address: 'Lào Cai', lat: 22.4809, lng: 103.9754 },
+            { name: 'Trạm Sa Pa', address: 'Sa Pa, Lào Cai', lat: 22.3364, lng: 103.8438 },
         ];
 
         const facilities = [
@@ -139,11 +274,13 @@ export class SeederService {
 
     private async seedBuses(): Promise<any[]> {
         const busTypes = [
-            { type: 'SLEEPER', seats: 34 },
-            { type: 'SEATER', seats: 45 },
+            { type: 'SLEEPER', seats: 34 }, // Giường nằm
+            { type: 'SEATER', seats: 28 },  // Ghế ngồi
         ];
 
         const buses: any[] = [];
+        let totalSeatsCreated = 0;
+
         for (let i = 0; i < 20; i++) {
             const busType = faker.helpers.arrayElement(busTypes);
             const licensePlate = this.generateLicensePlate();
@@ -156,15 +293,71 @@ export class SeederService {
                 vacancy: busType.seats,
                 status: faker.helpers.arrayElement(['AVAILABLE', 'UNAVAILABLE']),
                 driverName: faker.person.fullName(),
-                seats: [], // Will be created separately in seat service
+                seats: [],
                 images: [],
                 createdBy: 'seeder'
             });
 
-            buses.push(await bus.save());
+            const savedBus = await bus.save();
+
+            // Create seats for this bus
+            const seats = await this.createSeatsForBus(savedBus._id.toString(), busType.type, busType.seats);
+            savedBus.seats = seats.map(s => s._id);
+            await savedBus.save();
+
+            totalSeatsCreated += seats.length;
+            this.logger.log(`  ✓ Tạo ${seats.length} ghế cho xe ${busNo} (${busType.type})`);
+
+            buses.push(savedBus);
         }
 
+        this.logger.log(`✅ Đã tạo ${totalSeatsCreated} ghế cho ${buses.length} xe buýt`);
         return buses;
+    }
+
+    /**
+     * Create seats for a bus based on type and capacity
+     */
+    private async createSeatsForBus(busId: string, busType: string, totalSeats: number): Promise<any[]> {
+        const seats: any[] = [];
+
+        if (busType === 'SLEEPER') {
+            // Giường nằm: 34 chỗ, 2 tầng
+            // Tầng 1 (Floor 1): A1-A17
+            // Tầng 2 (Floor 2): B1-B17
+            const floors = ['A', 'B'];
+            for (let floor = 0; floor < floors.length; floor++) {
+                for (let i = 1; i <= 17; i++) {
+                    const seatNo = `${floors[floor]}${i}`;
+                    const seat = new this.seatModel({
+                        busId: new Types.ObjectId(busId),
+                        seatNo,
+                        floor: floor + 1,
+                        status: 'EMPTY',
+                        type: 'sleeper',
+                        price: 0
+                    });
+                    seats.push(await seat.save());
+                }
+            }
+        } else {
+            // Ghế ngồi: 28 chỗ, 1 tầng
+            // A1-A28
+            for (let i = 1; i <= totalSeats; i++) {
+                const seatNo = `A${i}`;
+                const seat = new this.seatModel({
+                    busId: new Types.ObjectId(busId),
+                    seatNo,
+                    floor: 1,
+                    status: 'EMPTY',
+                    type: 'seat',
+                    price: 0
+                });
+                seats.push(await seat.save());
+            }
+        }
+
+        return seats;
     }
 
     private async seedRoutes(stations: any[]): Promise<any[]> {
@@ -184,25 +377,31 @@ export class SeederService {
             if (usedPairs.has(pairKey)) continue;
             usedPairs.add(pairKey);
 
-            // Randomly add intermediate stations
-            const intermediateStations: any[] = [];
-            if (faker.datatype.boolean({ probability: 0.3 })) {
-                const availableStations = stations.filter((s: any) =>
-                    s._id.toString() !== departureStation._id.toString() && s._id.toString() !== arrivalStation._id.toString()
-                );
-                if (availableStations.length > 0) {
-                    intermediateStations.push(faker.helpers.arrayElement(availableStations)._id.toString());
-                }
-            }
+            // Find intermediate stations based on geographic location
+            const intermediateStations = this.findIntermediateStations(
+                departureStation,
+                arrivalStation,
+                stations
+            );
 
             const stationIds = [
-                departureStation._id.toString(),
+                departureStation._id,
                 ...intermediateStations,
-                arrivalStation._id.toString()
+                arrivalStation._id
             ];
 
-            const distanceKm = faker.number.int({ min: 50, max: 500 }); // realistic km range
-            const estimatedDuration = Math.floor(distanceKm * 1.2); // ~1.2 minutes per km
+            // Calculate actual distance based on stations
+            const distanceKm = this.calculateRouteDistance(stationIds, stations);
+
+            // Skip routes that are too long (over 2000km)
+            if (distanceKm > 2000) {
+                this.logger.warn(`  ⚠️ Bỏ qua route quá dài: ${distanceKm.toFixed(0)}km`);
+                continue;
+            }
+
+            // Calculate duration: ~1.2 minutes per km, capped at 2880 minutes (48h)
+            const calculatedDuration = Math.floor(distanceKm * 1.2);
+            const estimatedDuration = Math.min(calculatedDuration, 2880);
             const etd = this.generateRandomTime();
 
             const route = new this.routeModel({
@@ -226,6 +425,101 @@ export class SeederService {
         }
 
         return routes;
+    }
+
+    /**
+     * Find intermediate stations between departure and arrival based on coordinates
+     */
+    private findIntermediateStations(departure: any, arrival: any, allStations: any[]): any[] {
+        const depCoords = departure.location.coordinates;
+        const arrCoords = arrival.location.coordinates;
+
+        // Filter out departure and arrival stations
+        const candidates = allStations.filter(
+            (s) => s._id.toString() !== departure._id.toString() && s._id.toString() !== arrival._id.toString()
+        );
+
+        // Calculate which stations are "between" departure and arrival
+        const stationsWithScore = candidates.map((station) => {
+            const coords = station.location.coordinates;
+            const score = this.calculateIntermediateScore(depCoords, arrCoords, coords);
+            return { station, score };
+        });
+
+        // Sort by score (lower is better - closer to the line between dep and arr)
+        stationsWithScore.sort((a, b) => a.score - b.score);
+
+        // Take 8-18 intermediate stations (for 10-20 total stations including dep/arr)
+        const desiredIntermediate = faker.number.int({ min: 8, max: 18 });
+        const numIntermediate = Math.min(desiredIntermediate, candidates.length);
+        const selected = stationsWithScore.slice(0, numIntermediate);
+
+        // Sort selected stations by distance from departure to maintain order
+        selected.sort((a, b) => {
+            const distA = this.calculateDistance(depCoords, a.station.location.coordinates);
+            const distB = this.calculateDistance(depCoords, b.station.location.coordinates);
+            return distA - distB;
+        });
+
+        return selected.map((s) => s.station._id);
+    }
+
+    /**
+     * Calculate how "between" a point is relative to two other points
+     * Lower score = more aligned with the line between dep and arr
+     */
+    private calculateIntermediateScore(depCoords: number[], arrCoords: number[], pointCoords: number[]): number {
+        const distDepToPoint = this.calculateDistance(depCoords, pointCoords);
+        const distPointToArr = this.calculateDistance(pointCoords, arrCoords);
+        const distDepToArr = this.calculateDistance(depCoords, arrCoords);
+
+        // If point is roughly on the path, distDepToPoint + distPointToArr ≈ distDepToArr
+        // Score = how much longer the detour is
+        return distDepToPoint + distPointToArr - distDepToArr;
+    }
+
+    /**
+     * Calculate distance between two coordinates (Haversine formula)
+     */
+    private calculateDistance(coords1: number[], coords2: number[]): number {
+        const [lon1, lat1] = coords1;
+        const [lon2, lat2] = coords2;
+
+        const R = 6371; // Earth radius in km
+        const dLat = ((lat2 - lat1) * Math.PI) / 180;
+        const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+        const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((lat1 * Math.PI) / 180) *
+            Math.cos((lat2 * Math.PI) / 180) *
+            Math.sin(dLon / 2) *
+            Math.sin(dLon / 2);
+
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
+    }
+
+    /**
+     * Calculate total route distance through all stations
+     */
+    private calculateRouteDistance(stationIds: any[], allStations: any[]): number {
+        let totalDistance = 0;
+
+        for (let i = 0; i < stationIds.length - 1; i++) {
+            const station1 = allStations.find((s) => s._id.toString() === stationIds[i].toString());
+            const station2 = allStations.find((s) => s._id.toString() === stationIds[i + 1].toString());
+
+            if (station1 && station2) {
+                const dist = this.calculateDistance(
+                    station1.location.coordinates,
+                    station2.location.coordinates
+                );
+                totalDistance += dist;
+            }
+        }
+
+        return Math.round(totalDistance);
     }
 
     private async seedSchedulings(routes: any[], buses: any[]): Promise<any[]> {
