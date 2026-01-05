@@ -17,10 +17,14 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UpdateSeatStatusDto } from './dto/update-status.dto';
 import { BookSeatDto } from './dto/book-seat.dto';
+import { SeatLockService, SeatLock } from './services/seat-lock.service';
 
 @Controller('/seats')
 export class SeatController {
-  constructor(private readonly seatService: SeatService) {}
+  constructor(
+    private readonly seatService: SeatService,
+    private readonly seatLockService: SeatLockService,
+  ) { }
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -71,5 +75,28 @@ export class SeatController {
   @Patch('bus/:busId/reset')
   async resetSeats(@Param('busId') busId: string) {
     return this.seatService.resetSeats(busId);
+  }
+
+  /**
+   * Get locked seats for a scheduling
+   */
+  @Get('scheduling/:schedulingId/locks')
+  async getLockedSeats(@Param('schedulingId') schedulingId: string) {
+    const locks = await this.seatLockService.getLockedSeats(schedulingId);
+    return { locks };
+  }
+
+  /**
+   * Force unlock a seat (admin only)
+   */
+  @Post('scheduling/:schedulingId/unlock/:seatId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async forceUnlock(
+    @Param('schedulingId') schedulingId: string,
+    @Param('seatId') seatId: string,
+  ) {
+    const unlocked = await this.seatLockService.forceUnlock(schedulingId, seatId);
+    return { success: unlocked };
   }
 }
