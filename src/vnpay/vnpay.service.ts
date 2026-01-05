@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -243,29 +245,32 @@ export class VNPayService {
   }
 
   /**
-   * Sort object theo alphabet
+   * Sort object theo alphabet và encode cho VNPay URL
    */
   private sortObject(obj: any): any {
     const sorted: any = {};
-    const keys = Object.keys(obj).sort();
-    keys.forEach((key) => {
-      sorted[key] = obj[key];
-    });
+    const str: string[] = [];
+    let key: string;
+    for (key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        str.push(encodeURIComponent(key));
+      }
+    }
+    str.sort();
+    for (let i = 0; i < str.length; i++) {
+      sorted[str[i]] = encodeURIComponent(obj[decodeURIComponent(str[i])]).replace(/%20/g, '+');
+    }
     return sorted;
   }
 
   /**
-   * Tạo URL thanh toán - Follow Java Config Pattern
+   * Tạo URL thanh toán - Follow VNPay Official Node.js Sample
+   * Reference: https://sandbox.vnpayment.vn/apis/docs/huong-dan-tich-hop/
    */
   createPaymentUrl(data: CreatePaymentUrlDto): string {
     this.logger.log('=====================================');
     this.logger.log('🚀 START CREATE PAYMENT URL');
     this.logger.log('=====================================');
-
-    // Clean orderInfo - remove Vietnamese diacritics
-    const cleanOrderInfo = this.removeVietnameseDiacritics(data.orderInfo);
-    this.logger.log(`📝 Original OrderInfo: "${data.orderInfo}"`);
-    this.logger.log(`✨ Cleaned OrderInfo: "${cleanOrderInfo}"`);
 
     // Fix IP Address (convert ::1 to 127.0.0.1)
     let ipAddr = data.ipAddr;
@@ -274,83 +279,85 @@ export class VNPayService {
     }
     this.logger.log(`🌐 IP Address: ${data.ipAddr} → ${ipAddr}`);
 
-    // Get current time in GMT+7 (like Java Calendar with GMT+7)
-    const now = new Date();
-    const createDate = this.formatDate(now);
+    // Get current date
+    const date = new Date();
+    const createDate = this.formatDate(date);
 
     // Expire date = now + 15 minutes
     const expireDate = this.formatDate(
-      new Date(now.getTime() + 15 * 60 * 1000),
+      new Date(date.getTime() + 15 * 60 * 1000),
     );
 
     this.logger.log(`⏰ CreateDate: ${createDate}`);
     this.logger.log(`⏰ ExpireDate: ${expireDate}`);
 
-    // Build params - EXACTLY like Java getVNPayConfig()
-    let vnpParams: any = {
-      vnp_Version: this.config.version,
-      vnp_Command: this.config.command,
-      vnp_TmnCode: this.config.tmnCode,
-      vnp_Amount: data.amount * 100, // VNPay requires amount * 100
-      vnp_CurrCode: 'VND',
-      vnp_TxnRef: data.orderId,
-      vnp_OrderInfo: cleanOrderInfo,
-      vnp_OrderType: this.config.orderType,
-      vnp_Locale: data.locale || 'vn',
-      vnp_ReturnUrl: this.config.returnUrl,
-      vnp_IpAddr: ipAddr,
-      vnp_CreateDate: createDate,
-      vnp_ExpireDate: expireDate,
-    };
+    // Amount must be multiplied by 100 (VNPay requirement)
+    const amount = data.amount;
+    const bankCode = data.bankCode;
 
-    if (data.bankCode) {
-      vnpParams.vnp_BankCode = data.bankCode;
+    // Clean orderInfo - Remove Vietnamese diacritics (querystring will handle URL encoding)
+    const orderInfo = this.removeVietnameseDiacritics(data.orderInfo);
+    this.logger.log(`📝 Original OrderInfo: "${data.orderInfo}"`);
+    this.logger.log(`✨ Cleaned OrderInfo: "${orderInfo}"`);
+
+    const orderType = this.config.orderType;
+    let locale = data.locale;
+    if (!locale || locale === '') {
+      locale = 'vn';
+    }
+    const currCode = 'VND';
+
+    let vnpUrl = this.config.apiUrl;
+
+    // Build params object - EXACTLY like VNPay official sample
+    let vnp_Params: any = {};
+    vnp_Params['vnp_Version'] = '2.1.0';
+    vnp_Params['vnp_Command'] = 'pay';
+    vnp_Params['vnp_TmnCode'] = this.config.tmnCode;
+    vnp_Params['vnp_Locale'] = locale;
+    vnp_Params['vnp_CurrCode'] = currCode;
+    vnp_Params['vnp_TxnRef'] = data.orderId;
+    vnp_Params['vnp_OrderInfo'] = orderInfo.replace(/ /g, '+');
+    vnp_Params['vnp_OrderType'] = orderType;
+    vnp_Params['vnp_Amount'] = amount * 100;
+    vnp_Params['vnp_ReturnUrl'] = this.config.returnUrl;
+    vnp_Params['vnp_IpAddr'] = ipAddr;
+    vnp_Params['vnp_CreateDate'] = createDate;
+    vnp_Params['vnp_ExpireDate'] = expireDate;
+
+    if (bankCode !== null && bankCode !== '' && bankCode !== undefined) {
+      vnp_Params['vnp_BankCode'] = bankCode;
     }
 
     this.logger.log('📦 Original Params:');
-    this.logger.log(JSON.stringify(vnpParams, null, 2));
+    this.logger.log(JSON.stringify(vnp_Params, null, 2));
 
-    // Sort params alphabetically
-    vnpParams = this.sortObject(vnpParams);
+    // Sort params alphabetically - REQUIRED by VNPay
+    vnp_Params = this.sortObject(vnp_Params);
 
-    this.logger.log('🔢 Sorted Params:');
-    this.logger.log(JSON.stringify(vnpParams, null, 2));
-
-    // Create sign data (WITH ENCODING for hash calculation - VNPay 2.1.0 requirement)
-    const signData = querystring.stringify(vnpParams, { encode: true });
+    // Create sign data - EXACTLY like VNPay official sample
+    // CRITICAL: Use { encode: false } for hash calculation
+    const signData = querystring.stringify(vnp_Params, { encode: false });
 
     this.logger.log('=====================================');
-    this.logger.log('🔐 SIGN DATA (for hashing - WITH ENCODING):');
+    this.logger.log('🔐 SIGN DATA (for hashing - NO ENCODING):');
     this.logger.log(signData);
     this.logger.log('=====================================');
 
-    // Calculate HMAC SHA512 hash
+    // Calculate HMAC SHA512 - EXACTLY like VNPay official sample
     const hmac = crypto.createHmac('sha512', this.config.hashSecret);
     const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
 
-    this.logger.log(
-      '🔑 Hash Secret (first 10 chars): ' +
-        this.config.hashSecret.substring(0, 10) +
-        '...',
-    );
-    this.logger.log('✅ Generated SecureHash: ' + signed);
-    this.logger.log('=====================================');
+    vnp_Params['vnp_SecureHash'] = signed;
+    vnpUrl += '?' + querystring.stringify(vnp_Params, { encode: false });
 
-    vnpParams.vnp_SecureHash = signed;
-
-    // Create final URL (WITH ENCODING for HTTP transmission)
-    const paymentUrl =
-      this.config.apiUrl +
-      '?' +
-      querystring.stringify(vnpParams, { encode: true });
-
-    this.logger.log('🌐 FINAL PAYMENT URL (WITH ENCODING):');
-    this.logger.log(paymentUrl);
+    this.logger.log('🌐 FINAL PAYMENT URL (URL ENCODED):');
+    this.logger.log(vnpUrl);
     this.logger.log('=====================================');
     this.logger.log('✅ CREATE PAYMENT URL COMPLETED');
     this.logger.log('=====================================\n');
 
-    return paymentUrl;
+    return vnpUrl;
   }
 
   /**
@@ -378,7 +385,8 @@ export class VNPayService {
 
     // Sort params
     const sortedParams = this.sortObject(params);
-    const signData = querystring.stringify(sortedParams, { encode: true });
+    // Use { encode: false } like VNPay official sample
+    const signData = querystring.stringify(sortedParams, { encode: false });
 
     this.logger.log('🔐 SIGN DATA (for verification):');
     this.logger.log(signData);
