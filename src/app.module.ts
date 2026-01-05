@@ -63,15 +63,16 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     },
     {
       provide: APP_PIPE,
-      useFactory: () => new ValidationPipe({
-        transform: true,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transformOptions: {
-          enableImplicitConversion: true,
-        },
-      }),
+      useFactory: () =>
+        new ValidationPipe({
+          transform: true,
+          whitelist: true,
+          forbidNonWhitelisted: true,
+          transformOptions: {
+            enableImplicitConversion: true,
+          },
+        }),
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

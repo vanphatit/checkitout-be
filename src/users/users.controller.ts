@@ -23,14 +23,19 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { GetUser } from '../common/decorators/get-user.decorator';
 import { UserRole } from './enums/user-role.enum';
 import { UsersService } from './users.service';
-import {
-  CreateUserDto,
-  UpdateUserDto,
-  UserResponseDto,
-} from './dto/user.dto';
+import { CreateUserDto, UpdateUserDto, UserResponseDto } from './dto/user.dto';
 import { UserActivityResponseDto } from './dto/user-activity.dto';
 import { GetUsersQueryDto } from './dto/get-users-query.dto';
 import * as bcrypt from 'bcryptjs';
+
+const BCRYPT_SALT_ROUNDS = 12;
+
+interface JwtUser {
+  userId: string;
+  role: UserRole;
+  email?: string;
+  phone: string;
+}
 
 @ApiTags('Users')
 @Controller('users')
@@ -47,7 +52,7 @@ export class UsersController {
     description: 'User profile retrieved successfully',
   })
   @Get('profile')
-  async getProfile(@GetUser() user: any): Promise<UserResponseDto> {
+  async getProfile(@GetUser() user: JwtUser): Promise<UserResponseDto> {
     const userDoc = await this.usersService.findById(user.userId);
     if (!userDoc) {
       throw new NotFoundException('User not found');
@@ -62,7 +67,7 @@ export class UsersController {
   })
   @Put('profile')
   async updateProfile(
-    @GetUser() user: any,
+    @GetUser() user: JwtUser,
     @Body() updateUserDto: UpdateUserDto,
   ): Promise<UserResponseDto> {
     const updatedUser = await this.usersService.update(
@@ -80,7 +85,7 @@ export class UsersController {
   @Get('seller/dashboard')
   @UseGuards(RolesGuard)
   @Roles(UserRole.SELLER)
-  async getSellerDashboard(@GetUser() user: any) {
+  async getSellerDashboard(@GetUser() user: JwtUser) {
     return {
       message: 'Seller dashboard data',
       userId: user.userId,
@@ -98,7 +103,7 @@ export class UsersController {
   @Post('manage-products')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SELLER)
-  async manageProducts(@GetUser() user: any) {
+  async manageProducts(@GetUser() user: JwtUser) {
     return {
       message: 'Product management access granted',
       userId: user.userId,
@@ -114,9 +119,7 @@ export class UsersController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
-  async getAllUsers(
-    @Query() query: GetUsersQueryDto,
-  ): Promise<{
+  async getAllUsers(@Query() query: GetUsersQueryDto): Promise<{
     items: UserResponseDto[];
     meta: { total: number; page: number; limit: number; totalPages: number };
   }> {
@@ -139,34 +142,43 @@ export class UsersController {
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN)
   async createUser(
-    @GetUser() admin: any,
+    @GetUser() admin: JwtUser,
     @Body() createUserDto: CreateUserDto,
   ): Promise<UserResponseDto> {
-    const hashedPassword = await bcrypt.hash(createUserDto.password, 12);
-    const createdUser = await this.usersService.create(
-      {
-        ...createUserDto,
-        password: hashedPassword,
-      },
-      { actorId: admin.userId },
-    );
+    // Hash password if provided (required for ACTIVE/PENDING users, optional for PRE_REGISTERED)
+    const userData: CreateUserDto = { ...createUserDto };
+    if (createUserDto.password) {
+      userData.password = await bcrypt.hash(
+        createUserDto.password,
+        BCRYPT_SALT_ROUNDS,
+      );
+    }
+
+    const createdUser = await this.usersService.create(userData, {
+      actorId: admin.userId,
+    });
 
     return this.usersService.toResponseDto(createdUser);
   }
 
   @ApiOperation({ summary: 'Get user activities (Admin or owner)' })
-  @ApiResponse({ status: 200, description: 'Activities retrieved successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Activities retrieved successfully',
+  })
   @ApiResponse({ status: 403, description: 'Access denied' })
   @Get(':id/activities')
   async getUserActivities(
     @Param('id') id: string,
-    @GetUser() currentUser: any,
+    @GetUser() currentUser: JwtUser,
     @Query('limit') limit?: string,
   ): Promise<UserActivityResponseDto[]> {
     if (currentUser.role !== UserRole.ADMIN && currentUser.userId !== id) {
       throw new ForbiddenException('Access denied');
     }
-    const parsedLimit = limit ? Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200) : 50;
+    const parsedLimit = limit
+      ? Math.min(Math.max(parseInt(limit, 10) || 0, 1), 200)
+      : 50;
     const activities = await this.usersService.getUserActivities(
       id,
       parsedLimit,
@@ -210,7 +222,7 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   async updateUser(
     @Param('id') id: string,
-    @GetUser() admin: any,
+    @GetUser() admin: JwtUser,
     @Body() updateUserDto: UpdateUserDto,
   ): Promise<UserResponseDto> {
     const updatedUser = await this.usersService.update(id, updateUserDto, {
@@ -227,7 +239,7 @@ export class UsersController {
   @Roles(UserRole.ADMIN)
   async deleteUser(
     @Param('id') id: string,
-    @GetUser() admin: any,
+    @GetUser() admin: JwtUser,
   ): Promise<{ message: string }> {
     await this.usersService.delete(id, { actorId: admin.userId });
     return { message: 'User removed successfully' };

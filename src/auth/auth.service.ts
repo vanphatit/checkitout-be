@@ -15,6 +15,7 @@ import {
   ResetPasswordDto,
   VerifyEmailDto,
   ChangePasswordDto,
+  CompleteRegistrationDto,
 } from './dto/auth.dto';
 import { RedisService } from '../modules/redis/redis.service';
 import { EmailService } from '../modules/email/email.service';
@@ -24,6 +25,9 @@ import { UserActivityAction } from '../users/enums/user-activity-action.enum';
 import * as crypto from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import type { Request } from 'express';
+import { normalizeEmail } from '../common/utils/string-normalizer.util';
+
+const BCRYPT_SALT_ROUNDS = 12;
 
 @Injectable()
 export class AuthService {
@@ -35,20 +39,73 @@ export class AuthService {
     private emailService: EmailService,
   ) {}
 
-  async validateUser(email: string, password: string): Promise<any> {
-    const user = await this.usersService.findByEmail(email);
+  async validateUser(
+    identifier: string,
+    password: string,
+    isPhone = false,
+  ): Promise<Omit<UserDocument, 'password'> | null> {
+    // Find user by email or phone
+    const normalizedIdentifier = isPhone
+      ? identifier
+      : normalizeEmail(identifier);
+    const user = isPhone
+      ? await this.usersService.findByPhone(normalizedIdentifier)
+      : await this.usersService.findByEmail(normalizedIdentifier);
+
+    if (!user) {
+      return null;
+    }
+
+    // PRE_REGISTERED users don't have passwords yet
+    if (user.status === UserStatus.PRE_REGISTERED) {
+      return null;
+    }
+
+    // Validate password
     if (
-      user &&
+      user.password &&
       (await this.usersService.validatePassword(password, user.password))
     ) {
       const { password: _, ...result } = user.toObject();
-      return result;
+      return result as Omit<UserDocument, 'password'>;
     }
+
     return null;
   }
 
   async login(loginDto: LoginDto, request?: Request) {
-    const user = await this.validateUser(loginDto.email, loginDto.password);
+    // Validate at least one identifier provided
+    if (!loginDto.email && !loginDto.phone) {
+      throw new UnauthorizedException('Email or phone is required');
+    }
+
+    // Determine if login is by phone or email
+    const identifier = loginDto.phone || loginDto.email;
+    const isPhone = !!loginDto.phone;
+    const normalizedIdentifier = isPhone
+      ? identifier!
+      : normalizeEmail(identifier!);
+
+    // Check for PRE_REGISTERED user first
+    let preRegUser;
+    if (isPhone) {
+      preRegUser = await this.usersService.findByPhone(normalizedIdentifier);
+    } else {
+      preRegUser = await this.usersService.findByEmail(normalizedIdentifier);
+    }
+
+    if (preRegUser && preRegUser.status === UserStatus.PRE_REGISTERED) {
+      throw new UnauthorizedException(
+        'Please complete your registration by providing email and password. Your account was created automatically when a ticket was booked for you.',
+      );
+    }
+
+    // Validate user credentials
+    const user = await this.validateUser(
+      normalizedIdentifier,
+      loginDto.password,
+      isPhone,
+    );
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -72,26 +129,25 @@ export class AuthService {
       throw new UnauthorizedException('Account is not active');
     }
 
-    const tokens = await this.generateTokens(user);
+    const tokens = await this.generateTokens(user as UserDocument);
 
     const ipAddress = this.getClientIp(request);
-    const userAgent = request?.headers['user-agent'] as string | undefined;
+    const userAgent = request?.headers['user-agent'];
+    const userId = (user._id as any).toString();
 
-    await this.usersService.recordSuccessfulLogin((user._id as any).toString(), {
+    await this.usersService.recordSuccessfulLogin(userId, {
       ipAddress,
       device: userAgent,
     });
 
     // Store refresh token in Redis
     await this.redisService.setWithExpiry(
-      `refresh_token:${user._id}`,
+      `refresh_token:${userId}`,
       tokens.refreshToken,
       7 * 24 * 60 * 60, // 7 days
     );
 
-    const freshUser = await this.usersService.findById(
-      (user._id as any).toString(),
-    );
+    const freshUser = await this.usersService.findById(userId);
 
     if (!freshUser) {
       throw new NotFoundException('User not found');
@@ -104,16 +160,98 @@ export class AuthService {
   }
 
   async register(registerDto: RegisterDto) {
-    const existingUser = await this.usersService.findByEmail(registerDto.email);
-    if (existingUser) {
-      throw new ConflictException('User already exists');
+    const normalizedEmail = normalizeEmail(registerDto.email);
+
+    // Ensure phone is provided for registration
+    if (!registerDto.phone) {
+      throw new BadRequestException(
+        'Phone number is required for registration',
+      );
     }
 
+    // Check if user with this phone already exists
+    const existingPhoneUser = await this.usersService.findByPhone(
+      registerDto.phone,
+    );
+
+    // If phone exists with PRE_REGISTERED status, complete their registration
+    if (
+      existingPhoneUser &&
+      existingPhoneUser.status === UserStatus.PRE_REGISTERED
+    ) {
+      // Check if email is already in use by another user
+      const existingEmailUser =
+        await this.usersService.findByEmail(normalizedEmail);
+      if (existingEmailUser) {
+        throw new ConflictException(
+          'Email is already in use by another account',
+        );
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(
+        registerDto.password,
+        BCRYPT_SALT_ROUNDS,
+      );
+
+      // Update PRE_REGISTERED user with email, password, and change status to ACTIVE
+      const userId = this.getUserId(existingPhoneUser);
+      await this.usersService.updateWithPassword(
+        userId,
+        {
+          email: normalizedEmail,
+          password: hashedPassword,
+          firstName: registerDto.firstName,
+          lastName: registerDto.lastName,
+          status: UserStatus.ACTIVE,
+          emailVerifiedAt: new Date(), // Auto-verify email for completed pre-registrations
+        },
+        {
+          actorId: userId,
+          activityAction: UserActivityAction.PROFILE_UPDATED,
+          description: 'User completed pre-registration via register endpoint',
+        },
+      );
+
+      return {
+        message:
+          'Registration completed successfully. You can now login with your email and password.',
+        data: {
+          phone: existingPhoneUser.phone,
+          email: normalizedEmail,
+          firstName: registerDto.firstName,
+          lastName: registerDto.lastName,
+          role: existingPhoneUser.role,
+          status: 'ACTIVE',
+        },
+      };
+    }
+
+    // If phone exists but NOT PRE_REGISTERED, reject
+    if (existingPhoneUser) {
+      throw new ConflictException('Phone number is already registered');
+    }
+
+    // Check if email is already in use
+    const existingEmailUser =
+      await this.usersService.findByEmail(normalizedEmail);
+    if (existingEmailUser) {
+      throw new ConflictException('Email already exists');
+    }
+
+    // Create new user (normal registration flow)
     // Hash password before creating user
-    const hashedPassword = await bcrypt.hash(registerDto.password, 12);
-    const userData = {
-      ...registerDto,
+    const hashedPassword = await bcrypt.hash(
+      registerDto.password,
+      BCRYPT_SALT_ROUNDS,
+    );
+    const userData: any = {
+      email: normalizedEmail,
       password: hashedPassword,
+      firstName: registerDto.firstName,
+      lastName: registerDto.lastName,
+      phone: registerDto.phone,
+      role: registerDto.role,
     };
 
     const user = await this.usersService.create(userData);
@@ -131,20 +269,22 @@ export class AuthService {
       `email_verification:${verificationToken}`,
       JSON.stringify({
         userId: (user._id as string).toString(),
-        email: registerDto.email,
+        email: normalizedEmail,
       }),
       24 * 60 * 60, // 24 hours
     );
 
     // Send verification email
-    try {
-      await this.emailService.sendEmailVerification(
-        user.email,
-        `${user.firstName} ${user.lastName}`,
-        verificationToken,
-      );
-    } catch (error) {
-      console.error('Failed to send verification email:', error);
+    if (user.email) {
+      try {
+        await this.emailService.sendEmailVerification(
+          user.email,
+          `${user.firstName} ${user.lastName}`,
+          verificationToken,
+        );
+      } catch (error) {
+        console.error('Failed to send verification email:', error);
+      }
     }
 
     return {
@@ -158,6 +298,65 @@ export class AuthService {
         phone: user.phone,
         role: user.role,
         status: user.status,
+      },
+    };
+  }
+
+  async completeRegistration(completeRegistrationDto: CompleteRegistrationDto) {
+    // Find user by phone with PRE_REGISTERED status
+    const user = await this.usersService.findByPhone(
+      completeRegistrationDto.phone,
+    );
+
+    if (!user) {
+      throw new NotFoundException('User not found with this phone number');
+    }
+
+    if (user.status !== UserStatus.PRE_REGISTERED) {
+      throw new BadRequestException(
+        'This account has already been registered. Please login with your credentials.',
+      );
+    }
+
+    // Normalize and check if email is already in use by another user
+    const normalizedEmail = normalizeEmail(completeRegistrationDto.email);
+    const existingEmailUser =
+      await this.usersService.findByEmail(normalizedEmail);
+    if (existingEmailUser) {
+      throw new ConflictException('Email is already in use by another account');
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(
+      completeRegistrationDto.password,
+      BCRYPT_SALT_ROUNDS,
+    );
+
+    // Update user with email, password, and change status to ACTIVE
+    const userId = this.getUserId(user);
+    await this.usersService.updateWithPassword(
+      userId,
+      {
+        email: normalizedEmail,
+        password: hashedPassword,
+        status: UserStatus.ACTIVE,
+        emailVerifiedAt: new Date(), // Auto-verify email for completed pre-registrations
+      },
+      {
+        actorId: userId,
+        activityAction: UserActivityAction.PROFILE_UPDATED,
+        description: 'User completed pre-registration',
+      },
+    );
+
+    return {
+      message:
+        'Registration completed successfully. You can now login with your email and password.',
+      data: {
+        phone: user.phone,
+        email: normalizedEmail,
+        firstName: user.firstName,
+        lastName: user.lastName,
       },
     };
   }
@@ -208,6 +407,12 @@ export class AuthService {
       throw new NotFoundException('User not found');
     }
 
+    if (!user.password) {
+      throw new BadRequestException(
+        'User does not have a password set. Please complete registration first.',
+      );
+    }
+
     const isCurrentValid = await this.usersService.validatePassword(
       changePasswordDto.currentPassword,
       user.password,
@@ -217,27 +422,31 @@ export class AuthService {
       throw new BadRequestException('Current password is incorrect');
     }
 
-    const hashedPassword = await bcrypt.hash(changePasswordDto.newPassword, 12);
+    const hashedPassword = await bcrypt.hash(
+      changePasswordDto.newPassword,
+      BCRYPT_SALT_ROUNDS,
+    );
 
     await this.usersService.updateWithPassword(
-      (user._id as any).toString(),
+      userId,
       { password: hashedPassword },
       {
-        actorId: (user._id as any).toString(),
+        actorId: userId,
         activityAction: UserActivityAction.PASSWORD_CHANGED,
         description: 'User changed their password',
       },
     );
 
     // Invalidate refresh token to force re-login
-    await this.redisService.del(`refresh_token:${(user._id as any).toString()}`);
+    await this.redisService.del(`refresh_token:${userId}`);
 
     return { message: 'Password updated successfully' };
   }
 
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
-    const user = await this.usersService.findByEmail(forgotPasswordDto.email);
-    if (!user) {
+    const normalizedEmail = normalizeEmail(forgotPasswordDto.email);
+    const user = await this.usersService.findByEmail(normalizedEmail);
+    if (!user || !user.email) {
       // Don't reveal if user exists or not
       return { message: 'If the email exists, a reset link has been sent' };
     }
@@ -248,7 +457,7 @@ export class AuthService {
     // Store reset token in Redis with 15 minutes expiry
     await this.redisService.setWithExpiry(
       `reset_token:${resetToken}`,
-      (user as any)._id.toString(),
+      this.getUserId(user),
       15 * 60, // 15 minutes
     );
 
@@ -278,16 +487,19 @@ export class AuthService {
     }
 
     // Hash new password
-    const hashedPassword = await bcrypt.hash(resetPasswordDto.newPassword, 10);
+    const hashedPassword = await bcrypt.hash(
+      resetPasswordDto.newPassword,
+      BCRYPT_SALT_ROUNDS,
+    );
 
     // Update password using internal method that accepts password field
     await this.usersService.updateWithPassword(
-      (user as any)._id.toString(),
+      userId,
       {
         password: hashedPassword,
       },
       {
-        actorId: (user._id as any).toString(),
+        actorId: userId,
         activityAction: UserActivityAction.PASSWORD_RESET,
         description: 'Password reset via recovery flow',
       },
@@ -297,7 +509,7 @@ export class AuthService {
     await this.redisService.del(`reset_token:${resetPasswordDto.token}`);
 
     // Invalidate all refresh tokens for this user
-    await this.redisService.del(`refresh_token:${(user as any)._id}`);
+    await this.redisService.del(`refresh_token:${userId}`);
 
     return { message: 'Password reset successfully' };
   }
@@ -355,13 +567,15 @@ export class AuthService {
     await this.redisService.del(`email_verification:${token}`);
 
     // Send welcome email after successful verification
-    try {
-      await this.emailService.sendWelcomeEmail(
-        user.email,
-        `${user.firstName} ${user.lastName}`,
-      );
-    } catch (error) {
-      console.error('Failed to send welcome email:', error);
+    if (user.email) {
+      try {
+        await this.emailService.sendWelcomeEmail(
+          user.email,
+          `${user.firstName} ${user.lastName}`,
+        );
+      } catch (error) {
+        console.error('Failed to send welcome email:', error);
+      }
     }
 
     return {
@@ -403,9 +617,10 @@ export class AuthService {
     }
   }
 
-  private async generateTokens(user: UserDocument | any) {
+  private async generateTokens(user: UserDocument) {
     const payload = {
       email: user.email,
+      phone: user.phone,
       sub: user._id,
       role: user.role,
     };
@@ -451,5 +666,9 @@ export class AuthService {
     }
 
     return request.ip;
+  }
+
+  private getUserId(user: UserDocument): string {
+    return (user._id as any).toString();
   }
 }

@@ -12,14 +12,22 @@ import { UserRole } from '../enums/user-role.enum';
 import { UserStatus } from '../enums/user-status.enum';
 
 export class CreateUserDto {
-  @ApiProperty({ example: 'user@example.com' })
+  @ApiPropertyOptional({
+    example: 'user@example.com',
+    description: 'Email (optional for PRE_REGISTERED users)',
+  })
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
-  @ApiProperty({ example: 'Password123!' })
+  @ApiPropertyOptional({
+    example: 'Password123!',
+    description: 'Password (optional for PRE_REGISTERED users)',
+  })
+  @IsOptional()
   @IsString()
   @MinLength(8)
-  password: string;
+  password?: string;
 
   @ApiProperty({ example: 'John' })
   @IsString()
@@ -33,11 +41,16 @@ export class CreateUserDto {
   @MaxLength(50)
   lastName: string;
 
-  @ApiPropertyOptional({ example: '+1234567890' })
-  @IsOptional()
+  @ApiProperty({
+    example: '0912345678',
+    description: 'Phone number (required) - Vietnamese format: 0xxxxxxxxx',
+  })
   @IsString()
-  @Matches(/^[+]?[1-9]\d{1,14}$/, { message: 'Invalid phone number format' })
-  phone?: string;
+  @Matches(/^0[3|5|7|8|9][0-9]{8}$/, {
+    message:
+      'Phone number must be in Vietnamese format: 0xxxxxxxxx (10 digits)',
+  })
+  phone: string;
 
   @ApiPropertyOptional({ enum: UserRole, example: UserRole.CUSTOMER })
   @IsOptional()
@@ -48,7 +61,6 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(UserStatus)
   status?: UserStatus;
-
 }
 
 export class UpdateUserDto {
@@ -66,10 +78,21 @@ export class UpdateUserDto {
   @MaxLength(50)
   lastName?: string;
 
-  @ApiPropertyOptional({ example: '+1234567890' })
+  @ApiPropertyOptional({ example: 'user@example.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiPropertyOptional({
+    example: '0912345678',
+    description: 'Phone number - Vietnamese format: 0xxxxxxxxx',
+  })
   @IsOptional()
   @IsString()
-  @Matches(/^[+]?[1-9]\d{1,14}$/, { message: 'Invalid phone number format' })
+  @Matches(/^0[3|5|7|8|9][0-9]{8}$/, {
+    message:
+      'Phone number must be in Vietnamese format: 0xxxxxxxxx (10 digits)',
+  })
   phone?: string;
 
   @ApiPropertyOptional({ enum: UserRole })
@@ -81,15 +104,16 @@ export class UpdateUserDto {
   @IsOptional()
   @IsEnum(UserStatus)
   status?: UserStatus;
-
 }
 
 export class UserResponseDto {
   @ApiProperty()
   id: string;
 
-  @ApiProperty()
-  email: string;
+  @ApiPropertyOptional({
+    description: 'Email (optional for PRE_REGISTERED users)',
+  })
+  email?: string;
 
   @ApiProperty()
   firstName: string;
@@ -97,8 +121,8 @@ export class UserResponseDto {
   @ApiProperty()
   lastName: string;
 
-  @ApiPropertyOptional()
-  phone?: string;
+  @ApiProperty({ description: 'Phone number (required)' })
+  phone: string;
 
   @ApiProperty({ enum: UserRole })
   role: UserRole;

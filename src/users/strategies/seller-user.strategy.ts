@@ -10,41 +10,34 @@ export class SellerUserStrategy implements IUserStrategy {
     return UserRole.SELLER;
   }
 
-  async validateCreationData(userData: CreateUserDto): Promise<void> {
+  validateCreationData(userData: CreateUserDto): Promise<void> {
     // Seller-specific validation
     if (!userData.phone) {
       throw new BadRequestException(
         'Phone number is required for Seller accounts',
       );
     }
-
+    return Promise.resolve();
   }
 
-  async processCreationData(
-    userData: CreateUserDto,
-  ): Promise<Partial<UserDocument>> {
-    return {
+  processCreationData(userData: CreateUserDto): Promise<Partial<UserDocument>> {
+    return Promise.resolve({
       ...userData,
       role: UserRole.SELLER,
-    };
+    });
   }
 
-  async validateUpdateData(
-    userData: UpdateUserDto,
-    currentUser: UserDocument,
-  ): Promise<void> {
+  validateUpdateData(userData: UpdateUserDto): Promise<void> {
     // Sellers can update their business info but not change to other roles without admin approval
     if (userData.role && userData.role !== UserRole.SELLER) {
       throw new BadRequestException(
         'Cannot change role without admin approval',
       );
     }
+    return Promise.resolve();
   }
 
-  async processUpdateData(
-    userData: UpdateUserDto,
-    currentUser: UserDocument,
-  ): Promise<Partial<UserDocument>> {
-    return { ...userData };
+  processUpdateData(userData: UpdateUserDto): Promise<Partial<UserDocument>> {
+    return Promise.resolve({ ...userData });
   }
 }

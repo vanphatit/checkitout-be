@@ -126,10 +126,10 @@ export class Ticket {
   // ============================================
   // SNAPSHOT
   // ============================================
-  @Prop({ 
-    type: Object, 
+  @Prop({
+    type: Object,
     required: false,
-    default: null 
+    default: null,
   })
   snapshot?: TicketSnapshot;
 }
@@ -143,5 +143,5 @@ TicketSchema.index({ schedulingId: 1 });
 TicketSchema.index({ status: 1 });
 TicketSchema.index({ expiredTime: 1 });
 TicketSchema.index({ transactionId: 1 });
-TicketSchema.index({ transferTicketId: 1 }); 
+TicketSchema.index({ transferTicketId: 1 });
 TicketSchema.index({ createdAt: -1 });

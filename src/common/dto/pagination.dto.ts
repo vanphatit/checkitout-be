@@ -7,7 +7,7 @@ export class PaginationDto {
     description: 'Số trang (bắt đầu từ 1)',
     minimum: 1,
     default: 1,
-    example: 1
+    example: 1,
   })
   @IsOptional()
   @Type(() => Number)
@@ -20,7 +20,7 @@ export class PaginationDto {
     minimum: 1,
     maximum: 1000,
     default: 10,
-    example: 10
+    example: 10,
   })
   @IsOptional()
   @Type(() => Number)
@@ -31,7 +31,7 @@ export class PaginationDto {
 
   @ApiPropertyOptional({
     description: 'Trường sắp xếp',
-    example: 'createdAt'
+    example: 'createdAt',
   })
   @IsOptional()
   @IsString({ message: 'Trường sắp xếp phải là chuỗi' })
@@ -41,7 +41,7 @@ export class PaginationDto {
     description: 'Thứ tự sắp xếp (asc hoặc desc)',
     enum: ['asc', 'desc'],
     default: 'desc',
-    example: 'desc'
+    example: 'desc',
   })
   @IsOptional()
   @IsString({ message: 'Thứ tự sắp xếp phải là chuỗi' })
@@ -50,7 +50,7 @@ export class PaginationDto {
 
   @ApiPropertyOptional({
     description: 'Từ khóa tìm kiếm',
-    example: 'Sài Gòn'
+    example: 'Sài Gòn',
   })
   @IsOptional()
   @IsString({ message: 'Từ khóa tìm kiếm phải là chuỗi' })

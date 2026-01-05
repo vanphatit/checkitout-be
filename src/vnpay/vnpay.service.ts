@@ -28,84 +28,194 @@ export class VNPayService {
   private config: VNPayConfig;
 
   constructor(private configService: ConfigService) {
-  const tmnCode = this.configService.get<string>('VNPAY_TMN_CODE');
-  const hashSecret = this.configService.get<string>('VNPAY_HASH_SECRET');
-  const apiUrl = this.configService.get<string>('VNPAY_API_URL');
-  const returnUrl = this.configService.get<string>('VNPAY_RETURN_URL');
+    const tmnCode = this.configService.get<string>('VNPAY_TMN_CODE');
+    const hashSecret = this.configService.get<string>('VNPAY_HASH_SECRET');
+    const apiUrl = this.configService.get<string>('VNPAY_API_URL');
+    const returnUrl = this.configService.get<string>('VNPAY_RETURN_URL');
 
-  // LOG ĐỂ DEBUG
-  this.logger.log('=====================================');
-  this.logger.log('🔧 LOADING VNPAY CONFIG FROM .ENV');
-  this.logger.log('=====================================');
-  this.logger.log(`TMN Code: ${tmnCode}`);
-  this.logger.log(`Hash Secret (first 10): ${hashSecret?.substring(0, 10)}...`);
-  this.logger.log(`Hash Secret (length): ${hashSecret?.length}`);
-  this.logger.log(`API URL: ${apiUrl}`);
-  this.logger.log(`Return URL: ${returnUrl}`);
-  this.logger.log('=====================================');
-
-  if (!tmnCode || !hashSecret || !apiUrl || !returnUrl) {
-    const missing: string[] = [];
-    if (!tmnCode) missing.push('VNPAY_TMN_CODE');
-    if (!hashSecret) missing.push('VNPAY_HASH_SECRET');
-    if (!apiUrl) missing.push('VNPAY_API_URL');
-    if (!returnUrl) missing.push('VNPAY_RETURN_URL');
-    
-    throw new Error(
-      `VNPay configuration is missing: ${missing.join(', ')}. ` +
-      'Please add them to your .env file.'
+    // LOG ĐỂ DEBUG
+    this.logger.log('=====================================');
+    this.logger.log('🔧 LOADING VNPAY CONFIG FROM .ENV');
+    this.logger.log('=====================================');
+    this.logger.log(`TMN Code: ${tmnCode}`);
+    this.logger.log(
+      `Hash Secret (first 10): ${hashSecret?.substring(0, 10)}...`,
     );
+    this.logger.log(`Hash Secret (length): ${hashSecret?.length}`);
+    this.logger.log(`API URL: ${apiUrl}`);
+    this.logger.log(`Return URL: ${returnUrl}`);
+    this.logger.log('=====================================');
+
+    if (!tmnCode || !hashSecret || !apiUrl || !returnUrl) {
+      const missing: string[] = [];
+      if (!tmnCode) missing.push('VNPAY_TMN_CODE');
+      if (!hashSecret) missing.push('VNPAY_HASH_SECRET');
+      if (!apiUrl) missing.push('VNPAY_API_URL');
+      if (!returnUrl) missing.push('VNPAY_RETURN_URL');
+
+      throw new Error(
+        `VNPay configuration is missing: ${missing.join(', ')}. ` +
+          'Please add them to your .env file.',
+      );
+    }
+
+    this.config = {
+      tmnCode,
+      hashSecret,
+      apiUrl,
+      returnUrl,
+      version: '2.1.0',
+      command: 'pay',
+      orderType: 'other',
+    };
+
+    this.logger.log('🔧 VNPay Config Initialized Successfully\n');
   }
-
-  this.config = {
-    tmnCode,
-    hashSecret,
-    apiUrl,
-    returnUrl,
-    version: '2.1.0',
-    command: 'pay',
-    orderType: 'other',
-  };
-
-  this.logger.log('🔧 VNPay Config Initialized Successfully\n');
-}
 
   /**
    * Remove Vietnamese diacritics
    */
   private removeVietnameseDiacritics(str: string): string {
     const diacriticsMap: Record<string, string> = {
-      'à': 'a', 'á': 'a', 'ạ': 'a', 'ả': 'a', 'ã': 'a', 
-      'â': 'a', 'ầ': 'a', 'ấ': 'a', 'ậ': 'a', 'ẩ': 'a', 'ẫ': 'a', 
-      'ă': 'a', 'ằ': 'a', 'ắ': 'a', 'ặ': 'a', 'ẳ': 'a', 'ẵ': 'a',
-      'è': 'e', 'é': 'e', 'ẹ': 'e', 'ẻ': 'e', 'ẽ': 'e', 
-      'ê': 'e', 'ề': 'e', 'ế': 'e', 'ệ': 'e', 'ể': 'e', 'ễ': 'e',
-      'ì': 'i', 'í': 'i', 'ị': 'i', 'ỉ': 'i', 'ĩ': 'i',
-      'ò': 'o', 'ó': 'o', 'ọ': 'o', 'ỏ': 'o', 'õ': 'o', 
-      'ô': 'o', 'ồ': 'o', 'ố': 'o', 'ộ': 'o', 'ổ': 'o', 'ỗ': 'o', 
-      'ơ': 'o', 'ờ': 'o', 'ớ': 'o', 'ợ': 'o', 'ở': 'o', 'ỡ': 'o',
-      'ù': 'u', 'ú': 'u', 'ụ': 'u', 'ủ': 'u', 'ũ': 'u', 
-      'ư': 'u', 'ừ': 'u', 'ứ': 'u', 'ự': 'u', 'ử': 'u', 'ữ': 'u',
-      'ỳ': 'y', 'ý': 'y', 'ỵ': 'y', 'ỷ': 'y', 'ỹ': 'y',
-      'đ': 'd',
-      'À': 'A', 'Á': 'A', 'Ạ': 'A', 'Ả': 'A', 'Ã': 'A', 
-      'Â': 'A', 'Ầ': 'A', 'Ấ': 'A', 'Ậ': 'A', 'Ẩ': 'A', 'Ẫ': 'A', 
-      'Ă': 'A', 'Ằ': 'A', 'Ắ': 'A', 'Ặ': 'A', 'Ẳ': 'A', 'Ẵ': 'A',
-      'È': 'E', 'É': 'E', 'Ẹ': 'E', 'Ẻ': 'E', 'Ẽ': 'E', 
-      'Ê': 'E', 'Ề': 'E', 'Ế': 'E', 'Ệ': 'E', 'Ể': 'E', 'Ễ': 'E',
-      'Ì': 'I', 'Í': 'I', 'Ị': 'I', 'Ỉ': 'I', 'Ĩ': 'I',
-      'Ò': 'O', 'Ó': 'O', 'Ọ': 'O', 'Ỏ': 'O', 'Õ': 'O', 
-      'Ô': 'O', 'Ồ': 'O', 'Ố': 'O', 'Ộ': 'O', 'Ổ': 'O', 'Ỗ': 'O', 
-      'Ơ': 'O', 'Ờ': 'O', 'Ớ': 'O', 'Ợ': 'O', 'Ở': 'O', 'Ỡ': 'O',
-      'Ù': 'U', 'Ú': 'U', 'Ụ': 'U', 'Ủ': 'U', 'Ũ': 'U', 
-      'Ư': 'U', 'Ừ': 'U', 'Ứ': 'U', 'Ự': 'U', 'Ử': 'U', 'Ữ': 'U',
-      'Ỳ': 'Y', 'Ý': 'Y', 'Ỵ': 'Y', 'Ỷ': 'Y', 'Ỹ': 'Y',
-      'Đ': 'D'
+      à: 'a',
+      á: 'a',
+      ạ: 'a',
+      ả: 'a',
+      ã: 'a',
+      â: 'a',
+      ầ: 'a',
+      ấ: 'a',
+      ậ: 'a',
+      ẩ: 'a',
+      ẫ: 'a',
+      ă: 'a',
+      ằ: 'a',
+      ắ: 'a',
+      ặ: 'a',
+      ẳ: 'a',
+      ẵ: 'a',
+      è: 'e',
+      é: 'e',
+      ẹ: 'e',
+      ẻ: 'e',
+      ẽ: 'e',
+      ê: 'e',
+      ề: 'e',
+      ế: 'e',
+      ệ: 'e',
+      ể: 'e',
+      ễ: 'e',
+      ì: 'i',
+      í: 'i',
+      ị: 'i',
+      ỉ: 'i',
+      ĩ: 'i',
+      ò: 'o',
+      ó: 'o',
+      ọ: 'o',
+      ỏ: 'o',
+      õ: 'o',
+      ô: 'o',
+      ồ: 'o',
+      ố: 'o',
+      ộ: 'o',
+      ổ: 'o',
+      ỗ: 'o',
+      ơ: 'o',
+      ờ: 'o',
+      ớ: 'o',
+      ợ: 'o',
+      ở: 'o',
+      ỡ: 'o',
+      ù: 'u',
+      ú: 'u',
+      ụ: 'u',
+      ủ: 'u',
+      ũ: 'u',
+      ư: 'u',
+      ừ: 'u',
+      ứ: 'u',
+      ự: 'u',
+      ử: 'u',
+      ữ: 'u',
+      ỳ: 'y',
+      ý: 'y',
+      ỵ: 'y',
+      ỷ: 'y',
+      ỹ: 'y',
+      đ: 'd',
+      À: 'A',
+      Á: 'A',
+      Ạ: 'A',
+      Ả: 'A',
+      Ã: 'A',
+      Â: 'A',
+      Ầ: 'A',
+      Ấ: 'A',
+      Ậ: 'A',
+      Ẩ: 'A',
+      Ẫ: 'A',
+      Ă: 'A',
+      Ằ: 'A',
+      Ắ: 'A',
+      Ặ: 'A',
+      Ẳ: 'A',
+      Ẵ: 'A',
+      È: 'E',
+      É: 'E',
+      Ẹ: 'E',
+      Ẻ: 'E',
+      Ẽ: 'E',
+      Ê: 'E',
+      Ề: 'E',
+      Ế: 'E',
+      Ệ: 'E',
+      Ể: 'E',
+      Ễ: 'E',
+      Ì: 'I',
+      Í: 'I',
+      Ị: 'I',
+      Ỉ: 'I',
+      Ĩ: 'I',
+      Ò: 'O',
+      Ó: 'O',
+      Ọ: 'O',
+      Ỏ: 'O',
+      Õ: 'O',
+      Ô: 'O',
+      Ồ: 'O',
+      Ố: 'O',
+      Ộ: 'O',
+      Ổ: 'O',
+      Ỗ: 'O',
+      Ơ: 'O',
+      Ờ: 'O',
+      Ớ: 'O',
+      Ợ: 'O',
+      Ở: 'O',
+      Ỡ: 'O',
+      Ù: 'U',
+      Ú: 'U',
+      Ụ: 'U',
+      Ủ: 'U',
+      Ũ: 'U',
+      Ư: 'U',
+      Ừ: 'U',
+      Ứ: 'U',
+      Ự: 'U',
+      Ử: 'U',
+      Ữ: 'U',
+      Ỳ: 'Y',
+      Ý: 'Y',
+      Ỵ: 'Y',
+      Ỷ: 'Y',
+      Ỹ: 'Y',
+      Đ: 'D',
     };
 
     return str
       .split('')
-      .map(char => diacriticsMap[char] || char)
+      .map((char) => diacriticsMap[char] || char)
       .join('')
       .replace(/[^a-zA-Z0-9\s\-]/g, '')
       .replace(/\s+/g, ' ')
@@ -118,15 +228,17 @@ export class VNPayService {
    */
   private formatDate(date: Date): string {
     // Convert to GMT+7 (Vietnam timezone)
-    const vnDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
-    
+    const vnDate = new Date(
+      date.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }),
+    );
+
     const year = vnDate.getFullYear();
     const month = String(vnDate.getMonth() + 1).padStart(2, '0');
     const day = String(vnDate.getDate()).padStart(2, '0');
     const hour = String(vnDate.getHours()).padStart(2, '0');
     const minute = String(vnDate.getMinutes()).padStart(2, '0');
     const second = String(vnDate.getSeconds()).padStart(2, '0');
-    
+
     return `${year}${month}${day}${hour}${minute}${second}`;
   }
 
@@ -165,9 +277,11 @@ export class VNPayService {
     // Get current time in GMT+7 (like Java Calendar with GMT+7)
     const now = new Date();
     const createDate = this.formatDate(now);
-    
+
     // Expire date = now + 15 minutes
-    const expireDate = this.formatDate(new Date(now.getTime() + 15 * 60 * 1000));
+    const expireDate = this.formatDate(
+      new Date(now.getTime() + 15 * 60 * 1000),
+    );
 
     this.logger.log(`⏰ CreateDate: ${createDate}`);
     this.logger.log(`⏰ ExpireDate: ${expireDate}`);
@@ -202,41 +316,48 @@ export class VNPayService {
     this.logger.log('🔢 Sorted Params:');
     this.logger.log(JSON.stringify(vnpParams, null, 2));
 
-    // Create sign data (NO ENCODING for hash calculation)
-    const signData = querystring.stringify(vnpParams, { encode: false });
-    
+    // Create sign data (WITH ENCODING for hash calculation - VNPay 2.1.0 requirement)
+    const signData = querystring.stringify(vnpParams, { encode: true });
+
     this.logger.log('=====================================');
-    this.logger.log('🔐 SIGN DATA (for hashing - NO ENCODING):');
+    this.logger.log('🔐 SIGN DATA (for hashing - WITH ENCODING):');
     this.logger.log(signData);
     this.logger.log('=====================================');
 
     // Calculate HMAC SHA512 hash
     const hmac = crypto.createHmac('sha512', this.config.hashSecret);
     const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
-    
-    this.logger.log('🔑 Hash Secret (first 10 chars): ' + this.config.hashSecret.substring(0, 10) + '...');
+
+    this.logger.log(
+      '🔑 Hash Secret (first 10 chars): ' +
+        this.config.hashSecret.substring(0, 10) +
+        '...',
+    );
     this.logger.log('✅ Generated SecureHash: ' + signed);
     this.logger.log('=====================================');
 
     vnpParams.vnp_SecureHash = signed;
 
     // Create final URL (WITH ENCODING for HTTP transmission)
-    const paymentUrl = this.config.apiUrl + '?' + querystring.stringify(vnpParams, { encode: true });
-    
+    const paymentUrl =
+      this.config.apiUrl +
+      '?' +
+      querystring.stringify(vnpParams, { encode: true });
+
     this.logger.log('🌐 FINAL PAYMENT URL (WITH ENCODING):');
     this.logger.log(paymentUrl);
     this.logger.log('=====================================');
     this.logger.log('✅ CREATE PAYMENT URL COMPLETED');
     this.logger.log('=====================================\n');
-    
+
     return paymentUrl;
   }
 
   /**
    * Verify callback từ VNPay
    */
-  verifyReturnUrl(vnpParams: any): { 
-    isValid: boolean; 
+  verifyReturnUrl(vnpParams: any): {
+    isValid: boolean;
     message: string;
     responseCode: string;
   } {
@@ -246,7 +367,7 @@ export class VNPayService {
 
     const secureHash = vnpParams.vnp_SecureHash;
     const responseCode = vnpParams.vnp_ResponseCode;
-    
+
     this.logger.log('📨 Received SecureHash: ' + secureHash);
     this.logger.log('📨 Response Code: ' + responseCode);
 
@@ -257,42 +378,42 @@ export class VNPayService {
 
     // Sort params
     const sortedParams = this.sortObject(params);
-    const signData = querystring.stringify(sortedParams, { encode: false });
-    
+    const signData = querystring.stringify(sortedParams, { encode: true });
+
     this.logger.log('🔐 SIGN DATA (for verification):');
     this.logger.log(signData);
-    
+
     const hmac = crypto.createHmac('sha512', this.config.hashSecret);
     const signed = hmac.update(Buffer.from(signData, 'utf-8')).digest('hex');
-    
+
     this.logger.log('✅ Calculated Hash: ' + signed);
     this.logger.log('🔍 Hashes Match: ' + (secureHash === signed));
     this.logger.log('=====================================');
 
     if (secureHash === signed) {
       this.logger.log('✅ SIGNATURE VALID');
-      
+
       if (responseCode === '00') {
         this.logger.log('✅ PAYMENT SUCCESS');
-        return { 
-          isValid: true, 
+        return {
+          isValid: true,
           message: 'Giao dịch thành công',
-          responseCode 
+          responseCode,
         };
       } else {
         this.logger.log(`⚠️ PAYMENT FAILED - Code: ${responseCode}`);
-        return { 
-          isValid: true, 
+        return {
+          isValid: true,
           message: this.getResponseMessage(responseCode),
-          responseCode
+          responseCode,
         };
       }
     } else {
       this.logger.error('❌ SIGNATURE INVALID');
-      return { 
-        isValid: false, 
+      return {
+        isValid: false,
         message: 'Chữ ký không hợp lệ',
-        responseCode: '97'
+        responseCode: '97',
       };
     }
   }

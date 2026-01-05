@@ -5,21 +5,21 @@ export type StationDocument = Station & Document;
 
 @Schema({
     timestamps: true,
-    collection: 'stations'
+    collection: 'stations',
 })
 export class Station {
     @Prop({
         required: [true, 'Tên trạm là bắt buộc'],
         trim: true,
         minlength: [2, 'Tên trạm phải có ít nhất 2 ký tự'],
-        maxlength: [100, 'Tên trạm không được vượt quá 100 ký tự']
+        maxlength: [100, 'Tên trạm không được vượt quá 100 ký tự'],
     })
     name: string;
 
     @Prop({
         required: [true, 'Địa chỉ là bắt buộc'],
         trim: true,
-        minlength: [5, 'Địa chỉ phải có ít nhất 5 ký tự']
+        minlength: [5, 'Địa chỉ phải có ít nhất 5 ký tự'],
     })
     address: string;
 
@@ -29,21 +29,26 @@ export class Station {
             default: 'Point',
             enum: {
                 values: ['Point'],
-                message: 'Location type phải là Point'
-            }
+                message: 'Location type phải là Point',
+            },
         },
         coordinates: {
             type: [Number],
             required: [true, 'Tọa độ là bắt buộc'],
             validate: {
                 validator: function (coords: number[]) {
-                    return coords.length === 2 &&
-                        coords[0] >= -180 && coords[0] <= 180 && // longitude
-                        coords[1] >= -90 && coords[1] <= 90;     // latitude
+                    return (
+                        coords.length === 2 &&
+                        coords[0] >= -180 &&
+                        coords[0] <= 180 && // longitude
+                        coords[1] >= -90 &&
+                        coords[1] <= 90
+                    ); // latitude
                 },
-                message: 'Tọa độ không hợp lệ. Longitude: [-180,180], Latitude: [-90,90]'
-            }
-        }
+                message:
+                    'Tọa độ không hợp lệ. Longitude: [-180,180], Latitude: [-90,90]',
+            },
+        },
     })
     location: {
         type: string;
@@ -64,8 +69,8 @@ export class Station {
             validator: function (phone: string) {
                 return !phone || /^[0-9+\-\s()]{10,15}$/.test(phone);
             },
-            message: 'Số điện thoại không hợp lệ'
-        }
+            message: 'Số điện thoại không hợp lệ',
+        },
     })
     contactPhone?: string;
 
@@ -76,17 +81,17 @@ export class Station {
         type: [String],
         validate: {
             validator: function (facilities: string[]) {
-                return !facilities || facilities.every(f => f.length <= 50);
+                return !facilities || facilities.every((f) => f.length <= 50);
             },
-            message: 'Mỗi tiện ích không được vượt quá 50 ký tự'
-        }
+            message: 'Mỗi tiện ích không được vượt quá 50 ký tự',
+        },
     })
     facilities?: string[];
 
     // Thông tin bổ sung từ OpenStreetMap
     @Prop({
         type: Object,
-        required: false
+        required: false,
     })
     osmData?: {
         placeId?: string;

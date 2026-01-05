@@ -9,7 +9,7 @@ export class LocationResponseDto {
     @ApiProperty({
         description: 'Tọa độ [longitude, latitude]',
         example: [106.6296638, 10.8230989],
-        type: [Number]
+        type: [Number],
     })
     @Expose()
     coordinates: [number, number];
@@ -24,7 +24,10 @@ export class StationResponseDto {
     @Expose()
     name: string;
 
-    @ApiProperty({ description: 'Địa chỉ trạm', example: '395 Kinh Dương Vương, An Lạc, Bình Tân, TP.HCM' })
+    @ApiProperty({
+        description: 'Địa chỉ trạm',
+        example: '395 Kinh Dương Vương, An Lạc, Bình Tân, TP.HCM',
+    })
     @Expose()
     address: string;
 
@@ -41,11 +44,17 @@ export class StationResponseDto {
     @Expose()
     latitude?: number;
 
-    @ApiProperty({ description: 'Mô tả trạm', example: 'Bến xe chính thức của TP.HCM' })
+    @ApiProperty({
+        description: 'Mô tả trạm',
+        example: 'Bến xe chính thức của TP.HCM',
+    })
     @Expose()
     description?: string;
 
-    @ApiProperty({ description: 'Số điện thoại liên hệ', example: '028-3868-4430' })
+    @ApiProperty({
+        description: 'Số điện thoại liên hệ',
+        example: '028-3868-4430',
+    })
     @Expose()
     contactPhone?: string;
 
@@ -56,7 +65,7 @@ export class StationResponseDto {
     @ApiProperty({
         description: 'Tiện ích tại trạm',
         example: ['Toilet', 'Canteen', 'Parking'],
-        type: [String]
+        type: [String],
     })
     @Expose()
     facilities?: string[];
@@ -73,7 +82,10 @@ export class StationResponseDto {
     @Expose()
     createdAt: Date;
 
-    @ApiProperty({ description: 'Ngày cập nhật', example: '2024-12-20T10:30:00.000Z' })
+    @ApiProperty({
+        description: 'Ngày cập nhật',
+        example: '2024-12-20T10:30:00.000Z',
+    })
     @Expose()
     updatedAt: Date;
 }
@@ -110,7 +122,10 @@ export class PaginatedStationResponseDto {
 }
 
 export class DistanceResponseDto {
-    @ApiProperty({ description: 'ID trạm thứ nhất', example: '60f7b3b3b3b3b3b3b3b3b3b3' })
+    @ApiProperty({
+        description: 'ID trạm thứ nhất',
+        example: '60f7b3b3b3b3b3b3b3b3b3b3',
+    })
     @Expose()
     station1Id: string;
 
@@ -118,7 +133,10 @@ export class DistanceResponseDto {
     @Expose()
     station1Name: string;
 
-    @ApiProperty({ description: 'ID trạm thứ hai', example: '60f7b3b3b3b3b3b3b3b3b3b4' })
+    @ApiProperty({
+        description: 'ID trạm thứ hai',
+        example: '60f7b3b3b3b3b3b3b3b3b3b4',
+    })
     @Expose()
     station2Id: string;
 
@@ -140,11 +158,17 @@ export class PlaceSearchResponseDto {
     @Expose()
     place_id: string;
 
-    @ApiProperty({ description: 'Tên địa điểm', example: 'Bến xe buýt Nguyễn Du' })
+    @ApiProperty({
+        description: 'Tên địa điểm',
+        example: 'Bến xe buýt Nguyễn Du',
+    })
     @Expose()
     name: string;
 
-    @ApiProperty({ description: 'Tên hiển thị', example: 'Bến xe buýt Nguyễn Du, Quận 1, TP.HCM' })
+    @ApiProperty({
+        description: 'Tên hiển thị',
+        example: 'Bến xe buýt Nguyễn Du, Quận 1, TP.HCM',
+    })
     @Expose()
     display_name: string;
 
@@ -168,10 +192,14 @@ export class PlaceSearchResponseDto {
     @Expose()
     subtype?: string;
 
-    @ApiProperty({ description: 'Khoảng cách từ vị trí tìm kiếm (m)', example: 150 })
+    @ApiProperty({
+        description: 'Khoảng cách từ vị trí tìm kiếm (m)',
+        example: 150,
+    })
     @Expose()
     distance?: number;
-} export class StationDistanceResponseDto {
+}
+export class StationDistanceResponseDto {
     @ApiProperty({ description: 'Khoảng cách (mét)', example: 169000 })
     @Expose()
     distance: number;
@@ -186,7 +214,10 @@ export class OpenStreetMapPlaceResponseDto {
     @Expose()
     name: string;
 
-    @ApiProperty({ description: 'Địa chỉ đầy đủ', example: '91 Nguyễn Trãi, An Phú, Ninh Kiều, Cần Thơ' })
+    @ApiProperty({
+        description: 'Địa chỉ đầy đủ',
+        example: '91 Nguyễn Trãi, An Phú, Ninh Kiều, Cần Thơ',
+    })
     @Expose()
     address: string;
 
