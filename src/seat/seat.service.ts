@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Bus, BusDocument } from '../bus/entities/bus.entity';
@@ -12,7 +16,7 @@ export class SeatService {
   constructor(
     @InjectModel(Bus.name) private busModel: Model<BusDocument>,
     @InjectModel(Seat.name) private seatModel: Model<SeatDocument>,
-  ) { }
+  ) {}
 
   async addSeat(createSeatDto: CreateSeatDto) {
     const bus = await this.busModel.findById(createSeatDto.busId);
@@ -188,7 +192,7 @@ export class SeatService {
   }
 
   /**
-   * Get seat for snapshot 
+   * Get seat for snapshot
    * Used when building transaction snapshot
    */
   async getSeatForSnapshot(seatId: string) {
@@ -208,14 +212,14 @@ export class SeatService {
     // Validate seat belongs to the bus
     if (seat.busId.toString() !== busId) {
       throw new BadRequestException(
-        `Seat ${seat.seatNo} does not belong to bus ${busId}`
+        `Seat ${seat.seatNo} does not belong to bus ${busId}`,
       );
     }
 
     // Check if seat is available
     if (seat.status !== SeatStatus.EMPTY) {
       throw new BadRequestException(
-        `Seat ${seat.seatNo} is not available (current status: ${seat.status})`
+        `Seat ${seat.seatNo} is not available (current status: ${seat.status})`,
       );
     }
   }
@@ -224,16 +228,16 @@ export class SeatService {
    * Update single seat status by seatId
    */
   async updateSeatStatus(
-    seatId: string, 
+    seatId: string,
     newStatus: SeatStatus,
-    expectedCurrentStatus?: SeatStatus
+    expectedCurrentStatus?: SeatStatus,
   ): Promise<SeatDocument> {
     const seat = await this.getSeatById(seatId);
 
     // Optional: validate current status before update
     if (expectedCurrentStatus && seat.status !== expectedCurrentStatus) {
       throw new BadRequestException(
-        `Cannot update seat: expected status ${expectedCurrentStatus}, but found ${seat.status}`
+        `Cannot update seat: expected status ${expectedCurrentStatus}, but found ${seat.status}`,
       );
     }
 
@@ -254,7 +258,7 @@ export class SeatService {
     return this.updateSeatStatus(
       seatId,
       SeatStatus.PENDING,
-      SeatStatus.EMPTY // Must be EMPTY to reserve
+      SeatStatus.EMPTY, // Must be EMPTY to reserve
     );
   }
 
@@ -265,7 +269,7 @@ export class SeatService {
     return this.updateSeatStatus(
       seatId,
       SeatStatus.SOLD,
-      SeatStatus.PENDING // Must be PENDING to confirm
+      SeatStatus.PENDING, // Must be PENDING to confirm
     );
   }
 
@@ -283,12 +287,12 @@ export class SeatService {
    */
   async releaseSeats(seatIds: string[]): Promise<{ releasedCount: number }> {
     const result = await this.seatModel.updateMany(
-      { _id: { $in: seatIds.map(id => new Types.ObjectId(id)) } },
-      { $set: { status: SeatStatus.EMPTY } }
+      { _id: { $in: seatIds.map((id) => new Types.ObjectId(id)) } },
+      { $set: { status: SeatStatus.EMPTY } },
     );
 
     return {
-      releasedCount: result.modifiedCount
+      releasedCount: result.modifiedCount,
     };
   }
 
@@ -298,10 +302,10 @@ export class SeatService {
    */
   async validateSeatBelongsToBus(seatId: string, busId: string): Promise<void> {
     const seat = await this.getSeatById(seatId);
-    
+
     if (seat.busId.toString() !== busId) {
       throw new BadRequestException(
-        `Seat ${seat.seatNo} does not belong to bus ${busId}`
+        `Seat ${seat.seatNo} does not belong to bus ${busId}`,
       );
     }
   }
@@ -311,7 +315,7 @@ export class SeatService {
    */
   async getSeatsByIds(seatIds: string[]): Promise<SeatDocument[]> {
     const seats = await this.seatModel
-      .find({ _id: { $in: seatIds.map(id => new Types.ObjectId(id)) } })
+      .find({ _id: { $in: seatIds.map((id) => new Types.ObjectId(id)) } })
       .exec();
 
     if (seats.length !== seatIds.length) {

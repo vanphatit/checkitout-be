@@ -63,5 +63,12 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 dump.rdb
 env.local
 
+.claude
+docs/
+plans/
+.github
+repomix-output.xml
+package-lock.json
+
 # Docs file
 docs/

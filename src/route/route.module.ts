@@ -7,15 +7,15 @@ import { Station, StationSchema } from '../station/entities/station.entity';
 import { CommonModule } from '../common/common.module';
 
 @Module({
-    imports: [
-        MongooseModule.forFeature([
-            { name: Route.name, schema: RouteSchema },
-            { name: Station.name, schema: StationSchema },
-        ]),
-        CommonModule,
-    ],
-    controllers: [RouteController],
-    providers: [RouteService],
-    exports: [RouteService],
+  imports: [
+    MongooseModule.forFeature([
+      { name: Route.name, schema: RouteSchema },
+      { name: Station.name, schema: StationSchema },
+    ]),
+    CommonModule,
+  ],
+  controllers: [RouteController],
+  providers: [RouteService],
+  exports: [RouteService],
 })
-export class RouteModule { }
+export class RouteModule {}

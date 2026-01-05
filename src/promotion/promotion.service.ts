@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Promotion, PromotionDocument } from './entities/promotion.entity';
@@ -12,7 +16,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 @Injectable()
 export class PromotionService {
   constructor(
-    @InjectModel(Promotion.name) private promoModel: Model<PromotionDocument>
+    @InjectModel(Promotion.name) private promoModel: Model<PromotionDocument>,
   ) {}
 
   async create(dto: CreatePromotionDto) {
@@ -35,18 +39,27 @@ export class PromotionService {
     });
 
     if (existingByName) {
-      throw new BadRequestException(`Promotion name "${dto.name}" already exists`);
+      throw new BadRequestException(
+        `Promotion name "${dto.name}" already exists`,
+      );
     }
 
     // Only check for past dates on non-recurring promotions
-    if (dto.type !== PromotionType.RECURRING && start.getTime() < now.getTime()) {
-      throw new BadRequestException('startDate cannot be in the past for non-recurring promotions');
+    if (
+      dto.type !== PromotionType.RECURRING &&
+      start.getTime() < now.getTime()
+    ) {
+      throw new BadRequestException(
+        'startDate cannot be in the past for non-recurring promotions',
+      );
     }
 
     // Validate recurring fields
     if (dto.type === PromotionType.RECURRING) {
       if (!dto.recurringMonth || !dto.recurringDay) {
-        throw new BadRequestException('recurringMonth and recurringDay are required for recurring promotions');
+        throw new BadRequestException(
+          'recurringMonth and recurringDay are required for recurring promotions',
+        );
       }
 
       // Check if recurring promotion already exists for this date
@@ -58,7 +71,7 @@ export class PromotionService {
 
       if (existing) {
         throw new BadRequestException(
-          `A recurring promotion already exists for ${dto.recurringMonth}/${dto.recurringDay}`
+          `A recurring promotion already exists for ${dto.recurringMonth}/${dto.recurringDay}`,
         );
       }
     }
@@ -95,19 +108,16 @@ export class PromotionService {
       ];
     }
 
-      // Role-based visibility
-      if (!userRole || userRole === UserRole.CUSTOMER) {
-        // GUEST (no role) & CUSTOMER
-        query.isActive = true;
-      } else if (
-        userRole === UserRole.ADMIN ||
-        userRole === UserRole.SELLER
-      ) {
-        // ADMIN & SELLER
-        if (isActive !== undefined) {
-          query.isActive = isActive;
-        }
+    // Role-based visibility
+    if (!userRole || userRole === UserRole.CUSTOMER) {
+      // GUEST (no role) & CUSTOMER
+      query.isActive = true;
+    } else if (userRole === UserRole.ADMIN || userRole === UserRole.SELLER) {
+      // ADMIN & SELLER
+      if (isActive !== undefined) {
+        query.isActive = isActive;
       }
+    }
 
     const sort: any = {};
     sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
@@ -115,7 +125,13 @@ export class PromotionService {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.promoModel.find(query).sort(sort).skip(skip).limit(limit).lean().exec(),
+      this.promoModel
+        .find(query)
+        .sort(sort)
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
       this.promoModel.countDocuments(query).exec(),
     ]);
 
@@ -143,22 +159,34 @@ export class PromotionService {
     if (!existing) throw new NotFoundException('Promotion not found');
 
     // Cannot change type or recurring dates
-    if (existing.type === PromotionType.RECURRING || existing.type === PromotionType.DEFAULT) {
+    if (
+      existing.type === PromotionType.RECURRING ||
+      existing.type === PromotionType.DEFAULT
+    ) {
       // Only allow updating value, name, description, isActive for recurring/default
       const allowedUpdates: any = {};
       if (dto.value !== undefined) allowedUpdates.value = dto.value;
       if (dto.name !== undefined) allowedUpdates.name = dto.name;
-      if (dto.description !== undefined) allowedUpdates.description = dto.description;
+      if (dto.description !== undefined)
+        allowedUpdates.description = dto.description;
       if (dto.isActive !== undefined) allowedUpdates.isActive = dto.isActive;
 
-      const updated = await this.promoModel.findByIdAndUpdate(id, allowedUpdates, { new: true });
+      const updated = await this.promoModel.findByIdAndUpdate(
+        id,
+        allowedUpdates,
+        { new: true },
+      );
       return updated;
     }
 
     // For special promotions, allow full update
     const now = new Date();
-    const newStart = dto.startDate ? new Date(dto.startDate) : existing.startDate;
-    const newExpiry = dto.expiryDate ? new Date(dto.expiryDate) : existing.expiryDate;
+    const newStart = dto.startDate
+      ? new Date(dto.startDate)
+      : existing.startDate;
+    const newExpiry = dto.expiryDate
+      ? new Date(dto.expiryDate)
+      : existing.expiryDate;
 
     if (isNaN(newStart.getTime()) || isNaN(newExpiry.getTime())) {
       throw new BadRequestException('Invalid startDate or expiryDate');
@@ -171,7 +199,7 @@ export class PromotionService {
     const item = await this.promoModel.findByIdAndUpdate(
       id,
       { ...dto, startDate: newStart, expiryDate: newExpiry },
-      { new: true }
+      { new: true },
     );
 
     return item;
@@ -184,37 +212,35 @@ export class PromotionService {
     const updated = await this.promoModel.findByIdAndUpdate(
       id,
       { value: dto.value, description: dto.description },
-      { new: true }
+      { new: true },
     );
 
     return updated;
   }
 
   async remove(id: string) {
-  const existing = await this.promoModel.findById(id).exec();
-  if (!existing) {
-    throw new NotFoundException('Promotion not found');
+    const existing = await this.promoModel.findById(id).exec();
+    if (!existing) {
+      throw new NotFoundException('Promotion not found');
+    }
+
+    // DEFAULT promotion không được disable
+    if (existing.type === PromotionType.DEFAULT) {
+      throw new BadRequestException('Cannot disable DEFAULT promotion');
+    }
+
+    // Nếu đã inactive rồi
+    if (!existing.isActive) {
+      throw new BadRequestException('Promotion is already disabled');
+    }
+
+    existing.isActive = false;
+    await existing.save();
+
+    return {
+      message: 'Promotion disabled successfully',
+    };
   }
-
-  // DEFAULT promotion không được disable
-  if (existing.type === PromotionType.DEFAULT) {
-    throw new BadRequestException(
-      'Cannot disable DEFAULT promotion'
-    );
-  }
-
-  // Nếu đã inactive rồi
-  if (!existing.isActive) {
-    throw new BadRequestException('Promotion is already disabled');
-  }
-
-  existing.isActive = false;
-  await existing.save();
-
-  return {
-    message: 'Promotion disabled successfully',
-  };
-}
 
   // ============================================
   // BUSINESS LOGIC METHODS
@@ -260,7 +286,9 @@ export class PromotionService {
     });
 
     if (!defaultPromo) {
-      throw new NotFoundException('Default promotion not found. Please run seeder.');
+      throw new NotFoundException(
+        'Default promotion not found. Please run seeder.',
+      );
     }
 
     return defaultPromo;
@@ -276,7 +304,9 @@ export class PromotionService {
     });
 
     if (!defaultPromo) {
-      throw new NotFoundException('Default promotion not found. Please run seeder.');
+      throw new NotFoundException(
+        'Default promotion not found. Please run seeder.',
+      );
     }
 
     return defaultPromo;
@@ -298,7 +328,10 @@ export class PromotionService {
   /**
    * Validate if promotion can be applied to a ticket's scheduling date
    */
-  async validatePromotionForDate(promotionId: string, schedulingDate: Date): Promise<boolean> {
+  async validatePromotionForDate(
+    promotionId: string,
+    schedulingDate: Date,
+  ): Promise<boolean> {
     const promotion = await this.findOne(promotionId);
 
     if (!promotion.isActive) {
@@ -310,13 +343,23 @@ export class PromotionService {
 
     if (promotion.type === PromotionType.RECURRING) {
       // Check if scheduling date matches recurring date
-      if (promotion.recurringMonth !== month || promotion.recurringDay !== day) {
-        throw new BadRequestException('Promotion does not match the scheduling date');
+      if (
+        promotion.recurringMonth !== month ||
+        promotion.recurringDay !== day
+      ) {
+        throw new BadRequestException(
+          'Promotion does not match the scheduling date',
+        );
       }
     } else if (promotion.type === PromotionType.SPECIAL) {
       // Check if scheduling date is within promotion period
-      if (schedulingDate < promotion.startDate || schedulingDate > promotion.expiryDate) {
-        throw new BadRequestException('Scheduling date is outside promotion period');
+      if (
+        schedulingDate < promotion.startDate ||
+        schedulingDate > promotion.expiryDate
+      ) {
+        throw new BadRequestException(
+          'Scheduling date is outside promotion period',
+        );
       }
     }
 

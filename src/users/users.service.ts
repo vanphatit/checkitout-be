@@ -15,6 +15,7 @@ import { UserStrategyFactory } from './factories/user-strategy.factory';
 import { UserActivityService } from './user-activity.service';
 import { UserActivityAction } from './enums/user-activity-action.enum';
 import * as bcrypt from 'bcryptjs';
+import { normalizeEmail } from '../common/utils/string-normalizer.util';
 
 interface UserOperationOptions {
   actorId?: string;
@@ -61,16 +62,45 @@ export class UsersService {
     userData: CreateUserDto,
     options?: UserOperationOptions,
   ): Promise<UserDocument> {
-    // Check if user already exists
-    const existingUser = await this.userModel.findOne({
-      email: userData.email,
-    });
-
-    if (existingUser) {
-      throw new ConflictException('Email already exists');
+    // Validate PRE_REGISTERED users
+    if (userData.status === UserStatus.PRE_REGISTERED) {
+      // PRE_REGISTERED users: phone required, email/password optional
+      if (!userData.phone) {
+        throw new ConflictException(
+          'Phone is required for PRE_REGISTERED users',
+        );
+      }
+      // Email and password are optional for PRE_REGISTERED users
+    } else {
+      // ACTIVE/PENDING/INACTIVE users: email and password required
+      if (!userData.email) {
+        throw new ConflictException(
+          'Email is required for non-PRE_REGISTERED users',
+        );
+      }
+      if (!userData.password) {
+        throw new ConflictException(
+          'Password is required for non-PRE_REGISTERED users',
+        );
+      }
     }
 
-    // Check phone uniqueness if provided
+    // Check if user already exists by email (if email provided)
+    if (userData.email) {
+      const normalizedEmail = normalizeEmail(userData.email);
+      const existingUser = await this.userModel.findOne({
+        email: normalizedEmail,
+      });
+
+      if (existingUser) {
+        throw new ConflictException('Email already exists');
+      }
+
+      // Use normalized email for user creation
+      userData.email = normalizedEmail;
+    }
+
+    // Check phone uniqueness (phone is always required now)
     if (userData.phone) {
       const existingPhone = await this.userModel.findOne({
         phone: userData.phone,
@@ -78,6 +108,8 @@ export class UsersService {
       if (existingPhone) {
         throw new ConflictException('Phone number already exists');
       }
+    } else if (userData.status !== UserStatus.PRE_REGISTERED) {
+      throw new ConflictException('Phone is required');
     }
 
     // Use Strategy Pattern for role-specific creation
@@ -94,7 +126,7 @@ export class UsersService {
       processedData.status === UserStatus.ACTIVE &&
       !processedData.emailVerifiedAt
     ) {
-      (processedData as Partial<UserDocument>).emailVerifiedAt = new Date();
+      processedData.emailVerifiedAt = new Date();
     }
 
     const createdUser = new this.userModel(processedData);
@@ -123,7 +155,8 @@ export class UsersService {
   }
 
   async findByEmail(email: string): Promise<UserDocument | null> {
-    return this.userModel.findOne({ email }).exec();
+    const normalizedEmail = normalizeEmail(email);
+    return this.userModel.findOne({ email: normalizedEmail }).exec();
   }
 
   async findById(id: string): Promise<UserDocument | null> {
@@ -148,6 +181,18 @@ export class UsersService {
       return existingUser;
     }
 
+    // Prevent PRE_REGISTERED users from transitioning to ACTIVE without email/password
+    if (
+      existingUser.status === UserStatus.PRE_REGISTERED &&
+      status === UserStatus.ACTIVE
+    ) {
+      if (!existingUser.email || !existingUser.password) {
+        throw new ConflictException(
+          'Cannot activate PRE_REGISTERED user without email and password. User must complete registration first.',
+        );
+      }
+    }
+
     const updatedUser = await this.userModel
       .findByIdAndUpdate(id, { status }, { new: true })
       .exec();
@@ -156,14 +201,18 @@ export class UsersService {
       await this.setEmailVerifiedTimestamp(id);
     }
 
-    await this.userActivityService.logUserActivity(id, UserActivityAction.STATUS_CHANGED, {
-      performedBy: options?.actorId,
-      description: `Status updated to ${status}`,
-      metadata: {
-        previousStatus: existingUser.status,
-        newStatus: status,
+    await this.userActivityService.logUserActivity(
+      id,
+      UserActivityAction.STATUS_CHANGED,
+      {
+        performedBy: options?.actorId,
+        description: `Status updated to ${status}`,
+        metadata: {
+          previousStatus: existingUser.status,
+          newStatus: status,
+        },
       },
-    });
+    );
 
     return updatedUser!;
   }
@@ -189,18 +238,30 @@ export class UsersService {
       }
     }
 
+    // Normalize email if being updated
+    if (updateData.email) {
+      const normalizedEmail = normalizeEmail(updateData.email);
+      if (normalizedEmail !== currentUser.email) {
+        const existingEmail = await this.userModel.findOne({
+          email: normalizedEmail,
+          _id: { $ne: id },
+        });
+        if (existingEmail) {
+          throw new ConflictException('Email already exists');
+        }
+      }
+      updateData.email = normalizedEmail;
+    }
+
     // Use Strategy Pattern for role-specific updates
     const role = updateData.role || currentUser.role;
     const strategy = this.userStrategyFactory.createStrategy(role);
 
     // Validate role-specific update data
-    await strategy.validateUpdateData(updateData, currentUser);
+    await strategy.validateUpdateData(updateData);
 
     // Process role-specific update data
-    const processedData = await strategy.processUpdateData(
-      updateData,
-      currentUser,
-    );
+    const processedData = await strategy.processUpdateData(updateData);
 
     const updatedUser = await this.userModel
       .findByIdAndUpdate(id, processedData, { new: true })
@@ -226,27 +287,38 @@ export class UsersService {
     });
 
     if (updateData.role && updateData.role !== currentUser.role) {
-      await this.userActivityService.logUserActivity(id, UserActivityAction.ROLE_CHANGED, {
-        performedBy: actorId,
-        description: `Role updated to ${updateData.role}`,
-        metadata: {
-          previousRole: currentUser.role,
-          newRole: updateData.role,
+      await this.userActivityService.logUserActivity(
+        id,
+        UserActivityAction.ROLE_CHANGED,
+        {
+          performedBy: actorId,
+          description: `Role updated to ${updateData.role}`,
+          metadata: {
+            previousRole: currentUser.role,
+            newRole: updateData.role,
+          },
         },
-      });
+      );
     }
 
     if (updateData.status && updateData.status !== currentUser.status) {
-      await this.userActivityService.logUserActivity(id, UserActivityAction.STATUS_CHANGED, {
-        performedBy: actorId,
-        description: `Status updated to ${updateData.status}`,
-        metadata: {
-          previousStatus: currentUser.status,
-          newStatus: updateData.status,
+      await this.userActivityService.logUserActivity(
+        id,
+        UserActivityAction.STATUS_CHANGED,
+        {
+          performedBy: actorId,
+          description: `Status updated to ${updateData.status}`,
+          metadata: {
+            previousStatus: currentUser.status,
+            newStatus: updateData.status,
+          },
         },
-      });
+      );
 
-      if (updateData.status === UserStatus.ACTIVE && !currentUser.emailVerifiedAt) {
+      if (
+        updateData.status === UserStatus.ACTIVE &&
+        !currentUser.emailVerifiedAt
+      ) {
         await this.setEmailVerifiedTimestamp(id);
       }
     }
@@ -260,14 +332,18 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
-    await this.userActivityService.logUserActivity(id, UserActivityAction.USER_DELETED, {
-      performedBy: options?.actorId,
-      description: 'User account deleted',
-      metadata: {
-        email: result.email,
-        role: result.role,
+    await this.userActivityService.logUserActivity(
+      id,
+      UserActivityAction.USER_DELETED,
+      {
+        performedBy: options?.actorId,
+        description: 'User account deleted',
+        metadata: {
+          email: result.email,
+          role: result.role,
+        },
       },
-    });
+    );
   }
 
   async findAll(): Promise<UserDocument[]> {
@@ -342,11 +418,7 @@ export class UsersService {
     timestamp = new Date(),
   ): Promise<UserDocument> {
     const updatedUser = await this.userModel
-      .findByIdAndUpdate(
-        id,
-        { emailVerifiedAt: timestamp },
-        { new: true },
-      )
+      .findByIdAndUpdate(id, { emailVerifiedAt: timestamp }, { new: true })
       .exec();
 
     if (!updatedUser) {
@@ -371,12 +443,16 @@ export class UsersService {
       )
       .exec();
 
-    await this.userActivityService.logUserActivity(id, UserActivityAction.LOGIN_SUCCESS, {
-      performedBy: id,
-      description: 'User logged in successfully',
-      ipAddress: context?.ipAddress,
-      device: context?.device,
-    });
+    await this.userActivityService.logUserActivity(
+      id,
+      UserActivityAction.LOGIN_SUCCESS,
+      {
+        performedBy: id,
+        description: 'User logged in successfully',
+        ipAddress: context?.ipAddress,
+        device: context?.device,
+      },
+    );
   }
 
   async validatePassword(
@@ -401,13 +477,17 @@ export class UsersService {
     }
 
     if (options?.activityAction) {
-      await this.userActivityService.logUserActivity(id, options.activityAction, {
-        performedBy: options.actorId,
-        description: options.description,
-        ipAddress: options.ipAddress,
-        device: options.device,
-        metadata: options.metadata,
-      });
+      await this.userActivityService.logUserActivity(
+        id,
+        options.activityAction,
+        {
+          performedBy: options.actorId,
+          description: options.description,
+          ipAddress: options.ipAddress,
+          device: options.device,
+          metadata: options.metadata,
+        },
+      );
     }
 
     return updatedUser;

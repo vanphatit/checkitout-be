@@ -11,16 +11,26 @@ import { SchedulingSearchService } from './services/scheduling-search.service';
 import { SearchModule } from '../modules/search/search.module';
 
 @Module({
-    imports: [
-        MongooseModule.forFeature([
-            { name: Scheduling.name, schema: SchedulingSchema },
-            { name: Route.name, schema: RouteSchema },
-            { name: Bus.name, schema: BusSchema },
-        ]),
-        SearchModule,
-    ],
-    controllers: [SchedulingController],
-    providers: [SchedulingService, ExcelProcessingService, ExcelImportService, SchedulingSearchService],
-    exports: [SchedulingService, ExcelProcessingService, ExcelImportService, SchedulingSearchService],
+  imports: [
+    MongooseModule.forFeature([
+      { name: Scheduling.name, schema: SchedulingSchema },
+      { name: Route.name, schema: RouteSchema },
+      { name: Bus.name, schema: BusSchema },
+    ]),
+    SearchModule,
+  ],
+  controllers: [SchedulingController],
+  providers: [
+    SchedulingService,
+    ExcelProcessingService,
+    ExcelImportService,
+    SchedulingSearchService,
+  ],
+  exports: [
+    SchedulingService,
+    ExcelProcessingService,
+    ExcelImportService,
+    SchedulingSearchService,
+  ],
 })
-export class SchedulingModule { }
+export class SchedulingModule {}

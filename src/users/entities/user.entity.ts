@@ -7,11 +7,11 @@ export type UserDocument = User & Document;
 
 @Schema({ timestamps: true })
 export class User {
-  @Prop({ required: true, unique: true })
-  email: string;
+  @Prop({ required: false, unique: true, sparse: true })
+  email?: string;
 
-  @Prop({ required: true })
-  password: string;
+  @Prop({ required: false })
+  password?: string;
 
   @Prop({ required: true })
   firstName: string;
@@ -19,8 +19,8 @@ export class User {
   @Prop({ required: true })
   lastName: string;
 
-  @Prop({ required: false, unique: true, sparse: true })
-  phone?: string;
+  @Prop({ required: true, unique: true })
+  phone: string;
 
   @Prop({
     type: String,

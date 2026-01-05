@@ -20,7 +20,7 @@ import { BookSeatDto } from './dto/book-seat.dto';
 
 @Controller('/seats')
 export class SeatController {
-  constructor(private readonly seatService: SeatService) { }
+  constructor(private readonly seatService: SeatService) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)

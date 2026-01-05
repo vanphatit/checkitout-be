@@ -19,6 +19,7 @@ import {
   ResetPasswordDto,
   VerifyEmailDto,
   ChangePasswordDto,
+  CompleteRegistrationDto,
 } from './dto/auth.dto';
 import { Auth } from '../common/decorators/auth.decorator';
 import { GetUser } from '../common/decorators/get-user.decorator';
@@ -66,6 +67,31 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  @ApiOperation({
+    summary: 'Complete pre-registration (DEPRECATED - use /register instead)',
+    deprecated: true,
+    description:
+      'This endpoint is deprecated. Please use POST /auth/register with phone, email, and password to complete pre-registration.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pre-registration completed successfully - you can now login',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'User not found with this phone number',
+  })
+  @ApiResponse({ status: 400, description: 'Account already registered' })
+  @ApiResponse({ status: 409, description: 'Email already in use' })
+  @Throttle({ default: { limit: 3, ttl: 300000 } }) // 3 attempts per 5 minutes
+  @Post('complete-registration')
+  @HttpCode(HttpStatus.OK)
+  async completeRegistration(
+    @Body() completeRegistrationDto: CompleteRegistrationDto,
+  ) {
+    return this.authService.completeRegistration(completeRegistrationDto);
   }
 
   @ApiOperation({ summary: 'Refresh access token' })
