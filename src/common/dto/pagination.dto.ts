@@ -1,4 +1,4 @@
-import { IsString, IsOptional, Min, Max, IsInt } from 'class-validator';
+import { IsString, IsOptional, Min, Max, IsInt, IsBoolean } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -18,7 +18,7 @@ export class PaginationDto {
   @ApiPropertyOptional({
     description: 'Số lượng bản ghi mỗi trang',
     minimum: 1,
-    maximum: 100,
+    maximum: 1000,
     default: 10,
     example: 10
   })
@@ -26,7 +26,7 @@ export class PaginationDto {
   @Type(() => Number)
   @IsInt({ message: 'Kích thước trang phải là số nguyên' })
   @Min(1, { message: 'Kích thước trang phải lớn hơn 0' })
-  @Max(100, { message: 'Kích thước trang không được vượt quá 100' })
+  @Max(1000, { message: 'Kích thước trang không được vượt quá 1000' })
   limit?: number = 10;
 
   @ApiPropertyOptional({
@@ -55,6 +55,23 @@ export class PaginationDto {
   @IsOptional()
   @IsString({ message: 'Từ khóa tìm kiếm phải là chuỗi' })
   search?: string;
+
+  @ApiPropertyOptional({
+    description: 'Bao gồm cả các bản ghi đã xóa (chỉ dành cho admin)',
+    default: false,
+    example: false,
+    type: Boolean
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    console.log('Transform includeDeleted:', value, typeof value);
+    if (value === undefined || value === null) return false;
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') return value.toLowerCase() === 'true';
+    return false;
+  }, { toClassOnly: true })
+  @IsBoolean({ message: 'includeDeleted phải là boolean' })
+  includeDeleted?: boolean = false;
 }
 
 export interface PaginatedResult<T> {

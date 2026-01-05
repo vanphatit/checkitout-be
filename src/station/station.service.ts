@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { plainToClass } from 'class-transformer';
 import { Station, StationDocument } from './entities/station.entity';
+import { Route, RouteDocument } from '../route/entities/route.entity';
 import { CreateStationDto, CreateStationFromAddressDto } from './dto/create-station.dto';
 import { UpdateStationDto } from './dto/update-station.dto';
 import {
@@ -11,6 +12,7 @@ import {
     DistanceResponseDto,
     PlaceSearchResponseDto
 } from './dto/station-response.dto';
+import { StationStatsResponseDto } from './dto/station-stats-response.dto';
 import { PaginationDto, PaginatedResult } from '../common/dto/pagination.dto';
 import { OpenStreetMapService } from '../common/services/openstreetmap.service';
 import {
@@ -23,6 +25,7 @@ import {
 export class StationService {
     constructor(
         @InjectModel(Station.name) private stationModel: Model<StationDocument>,
+        @InjectModel(Route.name) private routeModel: Model<RouteDocument>,
         private openStreetMapService: OpenStreetMapService,
     ) { }
 
@@ -35,9 +38,12 @@ export class StationService {
             description: stationObj.description,
             latitude: stationObj.location?.coordinates[1],
             longitude: stationObj.location?.coordinates[0],
+            contactPhone: stationObj.contactPhone,
+            operatingHours: stationObj.operatingHours,
             facilities: stationObj.facilities,
             osmData: stationObj.osmData,
             isActive: stationObj.isActive,
+            isDeleted: stationObj.isDeleted,
             createdAt: stationObj.createdAt,
             updatedAt: stationObj.updatedAt
         }, { excludeExtraneousValues: true });
@@ -95,11 +101,11 @@ export class StationService {
     }
 
     async findAll(paginationDto: PaginationDto): Promise<PaginatedStationResponseDto> {
-        const { page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', search } = paginationDto;
+        const { page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', search, includeDeleted = false } = paginationDto;
 
         try {
-            // Build query
-            const query: any = { isActive: true };
+            // Build query - nếu includeDeleted = true (admin), không filter isDeleted
+            const query: any = includeDeleted ? {} : { isDeleted: false };
             if (search) {
                 query.$or = [
                     { name: { $regex: search, $options: 'i' } },
@@ -144,9 +150,9 @@ export class StationService {
 
     async findOne(id: string): Promise<StationResponseDto> {
         try {
-            const station = await this.stationModel.findById(id).exec();
+            const station = await this.stationModel.findOne({ _id: id, isDeleted: false }).exec();
 
-            if (!station || !station.isActive) {
+            if (!station) {
                 throw new ResourceNotFoundException('Trạm', id);
             }
 
@@ -171,6 +177,8 @@ export class StationService {
             };
         }
 
+        const isActive = updateStationDto.isActive;
+
         const updatedStation = await this.stationModel.findByIdAndUpdate(
             id,
             updatePayload,
@@ -185,9 +193,30 @@ export class StationService {
     }
 
     async remove(id: string): Promise<StationResponseDto> {
+        // Kiểm tra trạm có tồn tại không
+        const station = await this.stationModel.findOne({ _id: id, isDeleted: false }).exec();
+        if (!station) {
+            throw new NotFoundException('Không tìm thấy trạm');
+        }
+
+        // Kiểm tra xem trạm có đang được sử dụng trong route nào không
+        const routesUsingStation = await this.routeModel.find({
+            stationIds: new Types.ObjectId(id),
+            isDeleted: false
+        }).exec();
+
+        if (routesUsingStation.length > 0) {
+            const routeNames = routesUsingStation.map(r => r.name).join(', ');
+            throw new ConflictException(
+                `Không thể xóa trạm này vì đang được sử dụng trong các tuyến đường: ${routeNames}. ` +
+                `Vui lòng xóa trạm khỏi các tuyến đường này trước khi xóa.`
+            );
+        }
+
+        // Nếu không có tuyến đường nào sử dụng, thực hiện xóa mềm
         const result = await this.stationModel.findByIdAndUpdate(
             id,
-            { isActive: false },
+            { isDeleted: true },
             { new: true }
         ).exec();
 
@@ -200,6 +229,7 @@ export class StationService {
 
     async findNearby(longitude: number, latitude: number, maxDistance: number = 5000): Promise<StationResponseDto[]> {
         const stations = await this.stationModel.find({
+            isDeleted: false,
             isActive: true,
             location: {
                 $near: {
@@ -218,7 +248,7 @@ export class StationService {
     async searchStations(query: string): Promise<StationResponseDto[]> {
         const searchRegex = new RegExp(query, 'i');
         const stations = await this.stationModel.find({
-            isActive: true,
+            isDeleted: false,
             $or: [
                 { name: searchRegex },
                 { address: searchRegex }
@@ -296,5 +326,49 @@ export class StationService {
             distance: Math.round(distance * 100) / 100, // Round to 2 decimal places
             unit: 'km'
         }, { excludeExtraneousValues: true });
+    }
+
+    async getStats(): Promise<StationStatsResponseDto> {
+        try {
+            const [total, active, inactive, deleted] = await Promise.all([
+                this.stationModel.countDocuments({}).exec(),
+                this.stationModel.countDocuments({ isDeleted: false, isActive: true }).exec(),
+                this.stationModel.countDocuments({ isDeleted: false, isActive: false }).exec(),
+                this.stationModel.countDocuments({ isDeleted: true }).exec()
+            ]);
+
+            return plainToClass(StationStatsResponseDto, {
+                total,
+                active,
+                inactive,
+                deleted
+            }, { excludeExtraneousValues: true });
+        } catch (error) {
+            throw new BusinessLogicException(`Lỗi khi lấy thống kê: ${error.message}`);
+        }
+    }
+
+    async restore(id: string): Promise<StationResponseDto> {
+        try {
+            const station = await this.stationModel.findById(id).exec();
+
+            if (!station) {
+                throw new ResourceNotFoundException('Trạm', id);
+            }
+
+            if (!station.isDeleted) {
+                throw new BusinessLogicException('Trạm này chưa bị xóa');
+            }
+
+            station.isDeleted = false;
+            const restoredStation = await station.save();
+
+            return this.toStationResponseDto(restoredStation);
+        } catch (error) {
+            if (error.name === 'CastError') {
+                throw new BusinessLogicException('ID trạm không hợp lệ');
+            }
+            throw error;
+        }
     }
 }

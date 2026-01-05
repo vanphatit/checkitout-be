@@ -1,16 +1,24 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import { plainToClass } from 'class-transformer';
 import { Route, RouteDocument } from './entities/route.entity';
 import { Station, StationDocument } from '../station/entities/station.entity';
+import { Scheduling, SchedulingDocument } from '../scheduling/entities/scheduling.entity';
 import { CreateRouteDto, UpdateRouteDto, CreateRouteFromAutoDto } from './dto/route.dto';
+import { RouteStatsResponseDto } from './dto/route-stats-response.dto';
 import { OpenStreetMapService, LocationCoordinates } from '../common/services/openstreetmap.service';
+import {
+    ResourceNotFoundException,
+    BusinessLogicException
+} from '../common/exceptions/custom-exceptions';
 
 @Injectable()
 export class RouteService {
     constructor(
         @InjectModel(Route.name) private routeModel: Model<RouteDocument>,
         @InjectModel(Station.name) private stationModel: Model<StationDocument>,
+        @InjectModel(Scheduling.name) private schedulingModel: Model<SchedulingDocument>,
         private openStreetMapService: OpenStreetMapService,
     ) { }
 
@@ -79,17 +87,18 @@ export class RouteService {
         }
     }
 
-    async findAll(): Promise<Route[]> {
+    async findAll(includeDeleted: boolean = false): Promise<Route[]> {
+        const query = includeDeleted ? {} : { isDeleted: false };
         return await this.routeModel
-            .find({ isActive: true })
-            .populate('stationIds', 'name address location')
+            .find(query)
+            .populate('stationIds', 'name address location isActive isDeleted')
             .exec();
     }
 
     async findOne(id: string): Promise<Route> {
         const route = await this.routeModel
-            .findById(id)
-            .populate('stationIds', 'name address location')
+            .findOne({ _id: id, isDeleted: false })
+            .populate('stationIds', 'name address location isActive isDeleted')
             .exec();
 
         if (!route) {
@@ -111,7 +120,7 @@ export class RouteService {
 
         const updatedRoute = await this.routeModel
             .findByIdAndUpdate(id, updateData, { new: true })
-            .populate('stationIds', 'name address location')
+            .populate('stationIds', 'name address location isActive isDeleted')
             .exec();
 
         if (!updatedRoute) {
@@ -122,8 +131,28 @@ export class RouteService {
     }
 
     async remove(id: string): Promise<void> {
+        // Kiểm tra tuyến đường có tồn tại không
+        const route = await this.routeModel.findOne({ _id: id, isDeleted: false }).exec();
+        if (!route) {
+            throw new NotFoundException('Không tìm thấy tuyến đường');
+        }
+
+        // Kiểm tra xem tuyến đường có đang được sử dụng trong scheduling nào không
+        const schedulingsUsingRoute = await this.schedulingModel.find({
+            routeId: new Types.ObjectId(id),
+            isDeleted: false
+        }).exec();
+
+        if (schedulingsUsingRoute.length > 0) {
+            throw new ConflictException(
+                `Không thể xóa tuyến đường này vì đang có ${schedulingsUsingRoute.length} lịch trình đang sử dụng. ` +
+                `Vui lòng xóa hoặc vô hiệu hóa các lịch trình này trước khi xóa tuyến đường.`
+            );
+        }
+
+        // Nếu không có lịch trình nào sử dụng, thực hiện xóa mềm
         const result = await this.routeModel
-            .findByIdAndUpdate(id, { isActive: false }, { new: true })
+            .findByIdAndUpdate(id, { isDeleted: true }, { new: true })
             .exec();
 
         if (!result) {
@@ -137,10 +166,11 @@ export class RouteService {
 
         return await this.routeModel
             .find({
+                isDeleted: false,
                 isActive: true,
                 stationIds: { $all: [originId, destinationId] }
             })
-            .populate('stationIds', 'name address location')
+            .populate('stationIds', 'name address location isActive isDeleted')
             .exec();
     }
 
@@ -148,13 +178,14 @@ export class RouteService {
         const searchRegex = new RegExp(query, 'i');
         return await this.routeModel
             .find({
+                isDeleted: false,
                 isActive: true,
                 $or: [
                     { name: searchRegex },
                     { description: searchRegex }
                 ]
             })
-            .populate('stationIds', 'name address location')
+            .populate('stationIds', 'name address location isActive isDeleted')
             .exec();
     }
 
@@ -200,7 +231,7 @@ export class RouteService {
                     },
                     { new: true }
                 )
-                .populate('stationIds', 'name address location')
+                .populate('stationIds', 'name address location isActive')
                 .exec();
 
             if (!updatedRoute) {
@@ -216,14 +247,129 @@ export class RouteService {
         }
     }
 
+    async suggestIntermediateStations(originId: string, destinationId: string): Promise<any> {
+        // Lấy thông tin 2 trạm đầu cuối
+        const [origin, destination] = await Promise.all([
+            this.stationModel.findById(originId).exec(),
+            this.stationModel.findById(destinationId).exec()
+        ]);
+
+        if (!origin || !destination) {
+            throw new BadRequestException('Không tìm thấy trạm đầu hoặc trạm cuối');
+        }
+
+        // Lấy tất cả trạm active trừ 2 trạm đầu/cuối
+        const allStations = await this.stationModel.find({
+            _id: { $nin: [new Types.ObjectId(originId), new Types.ObjectId(destinationId)] },
+            isDeleted: false,
+            isActive: true
+        }).exec();
+
+        // Tính khoảng cách và góc từ origin đến destination
+        const originCoords = { latitude: origin.location.coordinates[1], longitude: origin.location.coordinates[0] };
+        const destCoords = { latitude: destination.location.coordinates[1], longitude: destination.location.coordinates[0] };
+        const totalDistance = this.openStreetMapService.calculateDistance(originCoords, destCoords);
+
+        // Lọc các trạm nằm gần đường thẳng giữa origin-destination
+        const suggestedStations = allStations
+            .map(station => {
+                const stationCoords = {
+                    latitude: station.location.coordinates[1],
+                    longitude: station.location.coordinates[0]
+                };
+
+                // Tính khoảng cách từ origin và destination đến station
+                const distFromOrigin = this.openStreetMapService.calculateDistance(originCoords, stationCoords);
+                const distFromDest = this.openStreetMapService.calculateDistance(stationCoords, destCoords);
+
+                // Nếu station nằm trên đường đi, thì distFromOrigin + distFromDest ≈ totalDistance
+                const deviation = Math.abs((distFromOrigin + distFromDest) - totalDistance);
+
+                // Lọc các trạm có độ lệch < 20% tổng khoảng cách (nằm gần đường thẳng)
+                return {
+                    _id: (station._id as any).toString(),
+                    name: station.name,
+                    address: station.address,
+                    location: station.location,
+                    isActive: station.isActive,
+                    distanceFromOrigin: Math.round(distFromOrigin * 100) / 100,
+                    deviation: Math.round(deviation * 100) / 100
+                };
+            })
+            .filter(station => station.deviation < totalDistance * 0.2) // Độ lệch < 20%
+            .sort((a, b) => a.distanceFromOrigin - b.distanceFromOrigin); // Sắp xếp theo khoảng cách từ origin
+
+        return {
+            origin: {
+                _id: (origin._id as any).toString(),
+                name: origin.name,
+                address: origin.address,
+                location: origin.location,
+                isActive: origin.isActive
+            },
+            destination: {
+                _id: (destination._id as any).toString(),
+                name: destination.name,
+                address: destination.address,
+                location: destination.location,
+                isActive: destination.isActive
+            },
+            suggestedStations,
+            totalDistance: Math.round(totalDistance * 100) / 100
+        };
+    }
+
     private async validateStations(stationIds: string[]): Promise<void> {
         const stations = await this.stationModel.find({
             _id: { $in: stationIds.map(id => new Types.ObjectId(id)) },
+            isDeleted: false,
             isActive: true
         }).exec();
 
         if (stations.length !== stationIds.length) {
             throw new BadRequestException('Một hoặc nhiều trạm không tồn tại hoặc không hoạt động');
+        }
+    }
+
+    async getStats(): Promise<RouteStatsResponseDto> {
+        try {
+            const [total, active, inactive, deleted] = await Promise.all([
+                this.routeModel.countDocuments({}).exec(),
+                this.routeModel.countDocuments({ isDeleted: false, isActive: true }).exec(),
+                this.routeModel.countDocuments({ isDeleted: false, isActive: false }).exec(),
+                this.routeModel.countDocuments({ isDeleted: true }).exec()
+            ]);
+
+            return plainToClass(RouteStatsResponseDto, {
+                total,
+                active,
+                inactive,
+                deleted
+            }, { excludeExtraneousValues: true });
+        } catch (error) {
+            throw new BusinessLogicException(`Lỗi khi lấy thống kê: ${error.message}`);
+        }
+    }
+
+    async restore(id: string): Promise<Route> {
+        try {
+            const route = await this.routeModel.findById(id).exec();
+
+            if (!route) {
+                throw new ResourceNotFoundException('Tuyến đường', id);
+            }
+
+            if (!route.isDeleted) {
+                throw new BusinessLogicException('Tuyến đường này chưa bị xóa');
+            }
+
+            route.isDeleted = false;
+            return await route.save();
+        } catch (error) {
+            if (error.name === 'CastError') {
+                throw new BusinessLogicException('ID tuyến đường không hợp lệ');
+            }
+            throw error;
         }
     }
 }

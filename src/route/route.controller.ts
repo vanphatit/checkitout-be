@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { RouteService } from './route.service';
 import { CreateRouteDto, UpdateRouteDto, CreateRouteFromAutoDto } from './dto/route.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -21,6 +21,25 @@ import { UserRole } from '../users/enums/user-role.enum';
 @Controller('routes')
 export class RouteController {
     constructor(private readonly routeService: RouteService) { }
+
+    @Get('stats')
+    @ApiOperation({ summary: 'Lấy thống kê tổng quan về tuyến đường' })
+    @ApiResponse({
+        status: 200,
+        description: 'Thống kê tuyến đường',
+        schema: {
+            type: 'object',
+            properties: {
+                total: { type: 'number', example: 20 },
+                active: { type: 'number', example: 15 },
+                inactive: { type: 'number', example: 3 },
+                deleted: { type: 'number', example: 2 }
+            }
+        }
+    })
+    async getStats() {
+        return this.routeService.getStats();
+    }
 
     @Post()
     @UseGuards(JwtAuthGuard, RolesGuard)
@@ -48,9 +67,10 @@ export class RouteController {
 
     @Get()
     @ApiOperation({ summary: 'Lấy danh sách tất cả tuyến đường' })
+    @ApiQuery({ name: 'includeDeleted', required: false, description: 'Bao gồm cả tuyến đã xóa (admin)', type: Boolean })
     @ApiResponse({ status: 200, description: 'Danh sách tuyến đường' })
-    findAll() {
-        return this.routeService.findAll();
+    findAll(@Query('includeDeleted') includeDeleted?: boolean) {
+        return this.routeService.findAll(includeDeleted);
     }
 
     @Get('search')
@@ -68,6 +88,21 @@ export class RouteController {
         @Query('destination') destinationStationId: string,
     ) {
         return this.routeService.findByStations(originStationId, destinationStationId);
+    }
+
+    @Get('suggest-stations')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN, UserRole.SELLER)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Gợi ý các trạm trung gian giữa 2 trạm đầu-cuối' })
+    @ApiResponse({ status: 200, description: 'Danh sách trạm gợi ý' })
+    @ApiResponse({ status: 400, description: 'Thiếu tham số' })
+    @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
+    suggestIntermediateStations(
+        @Query('originId') originId: string,
+        @Query('destinationId') destinationId: string
+    ) {
+        return this.routeService.suggestIntermediateStations(originId, destinationId);
     }
 
     @Get(':id')
@@ -113,5 +148,18 @@ export class RouteController {
     @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
     remove(@Param('id') id: string) {
         return this.routeService.remove(id);
+    }
+
+    @Post(':id/restore')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Khôi phục tuyến đường đã xóa' })
+    @ApiResponse({ status: 200, description: 'Tuyến đường đã được khôi phục thành công' })
+    @ApiResponse({ status: 404, description: 'Không tìm thấy tuyến đường' })
+    @ApiResponse({ status: 400, description: 'Tuyến đường này chưa bị xóa' })
+    @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
+    restore(@Param('id') id: string) {
+        return this.routeService.restore(id);
     }
 }

@@ -58,6 +58,9 @@ export class Route {
     @Prop({ default: true })
     isActive: boolean;
 
+    @Prop({ default: false })
+    isDeleted: boolean;
+
     @Prop({
         min: [0, 'Giá cơ bản không thể âm'],
         max: [10000000, 'Giá cơ bản quá cao']

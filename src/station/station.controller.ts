@@ -31,6 +31,25 @@ import { UserRole } from '../users/enums/user-role.enum';
 export class StationController {
     constructor(private readonly stationService: StationService) { }
 
+    @Get('stats')
+    @ApiOperation({ summary: 'Lấy thống kê tổng quan về trạm' })
+    @ApiResponse({
+        status: 200,
+        description: 'Thống kê trạm',
+        schema: {
+            type: 'object',
+            properties: {
+                total: { type: 'number', example: 50 },
+                active: { type: 'number', example: 40 },
+                inactive: { type: 'number', example: 8 },
+                deleted: { type: 'number', example: 2 }
+            }
+        }
+    })
+    async getStats() {
+        return this.stationService.getStats();
+    }
+
     @Post()
     @UseGuards(JwtAuthGuard, RolesGuard)
     @Roles(UserRole.ADMIN, UserRole.SELLER)
@@ -139,5 +158,18 @@ export class StationController {
     @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
     remove(@Param('id') id: string): Promise<StationResponseDto> {
         return this.stationService.remove(id);
+    }
+
+    @Post(':id/restore')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Khôi phục trạm đã xóa' })
+    @ApiResponse({ status: 200, description: 'Trạm đã được khôi phục thành công', type: StationResponseDto })
+    @ApiResponse({ status: 404, description: 'Không tìm thấy trạm' })
+    @ApiResponse({ status: 400, description: 'Trạm này chưa bị xóa' })
+    @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
+    restore(@Param('id') id: string): Promise<StationResponseDto> {
+        return this.stationService.restore(id);
     }
 }

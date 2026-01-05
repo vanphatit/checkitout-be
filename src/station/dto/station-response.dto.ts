@@ -28,10 +28,18 @@ export class StationResponseDto {
     @Expose()
     address: string;
 
-    @ApiProperty({ description: 'Vị trí địa lý', type: LocationResponseDto })
+    @ApiProperty({ description: 'Vị trí địa lý', type: LocationResponseDto, required: false })
     @Expose()
     @Type(() => LocationResponseDto)
-    location: LocationResponseDto;
+    location?: LocationResponseDto;
+
+    @ApiProperty({ description: 'Kinh độ', example: 106.6296638, required: false })
+    @Expose()
+    longitude?: number;
+
+    @ApiProperty({ description: 'Vĩ độ', example: 10.8230989, required: false })
+    @Expose()
+    latitude?: number;
 
     @ApiProperty({ description: 'Mô tả trạm', example: 'Bến xe chính thức của TP.HCM' })
     @Expose()
@@ -56,6 +64,10 @@ export class StationResponseDto {
     @ApiProperty({ description: 'Trạng thái hoạt động', example: true })
     @Expose()
     isActive: boolean;
+
+    @ApiProperty({ description: 'Trạng thái xóa', example: false })
+    @Expose()
+    isDeleted: boolean;
 
     @ApiProperty({ description: 'Ngày tạo', example: '2024-12-20T10:30:00.000Z' })
     @Expose()

@@ -132,7 +132,7 @@ export class SchedulingService {
         date?: string;
         status?: string;
     }): Promise<Scheduling[]> {
-        const query: any = { isActive: true };
+        const query: any = { isDeleted: false };
 
         if (filters?.routeId) {
             query.routeId = new Types.ObjectId(filters.routeId);
@@ -177,7 +177,7 @@ export class SchedulingService {
                 path: 'routeId',
                 populate: {
                     path: 'stationIds',
-                    select: 'name address location'
+                    select: 'name address location isActive'
                 }
             })
             .populate('busIds')
@@ -238,7 +238,10 @@ export class SchedulingService {
 
         const updatedScheduling = await this.schedulingModel
             .findByIdAndUpdate(id, updateData, { new: true })
-            .populate('routeId')
+            .populate({
+                path: 'routeId',
+                populate: { path: 'stationIds', select: 'name address location isActive' }
+            })
             .populate('busIds')
             .exec();
 
@@ -262,6 +265,7 @@ export class SchedulingService {
     async findByRoute(routeId: string, date?: string): Promise<Scheduling[]> {
         const query: any = {
             routeId: new Types.ObjectId(routeId),
+            isDeleted: false,
             isActive: true
         };
 
@@ -278,7 +282,10 @@ export class SchedulingService {
 
         return await this.schedulingModel
             .find(query)
-            .populate('routeId')
+            .populate({
+                path: 'routeId',
+                populate: { path: 'stationIds', select: 'name address location isActive' }
+            })
             .populate('busIds')
             .sort({ etd: 1 })
             .exec();
@@ -294,9 +301,13 @@ export class SchedulingService {
                 },
                 status: 'scheduled',
                 availableSeats: { $gt: 0 },
+                isDeleted: false,
                 isActive: true
             })
-            .populate('routeId')
+            .populate({
+                path: 'routeId',
+                populate: { path: 'stationIds', select: 'name address location isActive' }
+            })
             .populate('busIds')
             .sort({ etd: 1 })
             .exec();
@@ -324,7 +335,10 @@ export class SchedulingService {
                 },
                 { new: true }
             )
-            .populate('routeId')
+            .populate({
+                path: 'routeId',
+                populate: { path: 'stationIds', select: 'name address location isActive' }
+            })
             .populate('busIds')
             .exec();
 
@@ -351,6 +365,7 @@ export class SchedulingService {
             busIds: { $in: busIds.map(id => new Types.ObjectId(id)) },
             departureDate: new Date(date),
             status: { $nin: ['cancelled', 'completed'] },
+            isDeleted: false,
             isActive: true
         };
 

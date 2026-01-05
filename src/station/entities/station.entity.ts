@@ -56,6 +56,9 @@ export class Station {
     @Prop({ default: true })
     isActive: boolean;
 
+    @Prop({ default: false })
+    isDeleted: boolean;
+
     @Prop({
         validate: {
             validator: function (phone: string) {

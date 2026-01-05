@@ -74,6 +74,11 @@ export class Scheduling {
     @IsBoolean({ message: 'Trạng thái hoạt động phải là boolean' })
     isActive: boolean;
 
+    @Prop({ default: false })
+    @IsOptional()
+    @IsBoolean({ message: 'Trạng thái xóa phải là boolean' })
+    isDeleted: boolean;
+
     @Prop({
         enum: ['scheduled', 'in-progress', 'completed', 'cancelled', 'delayed'],
         default: 'scheduled',
