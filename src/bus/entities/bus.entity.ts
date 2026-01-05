@@ -7,6 +7,16 @@ import * as mongoose from 'mongoose';
 
 export type BusDocument = Bus & Document;
 
+@Schema()
+export class BusImage {
+  @Prop({ required: true })
+  url: string;
+
+  @Prop({ required: true })
+  publicId: string;
+}
+
+export const BusImageSchema = SchemaFactory.createForClass(BusImage);
 @Schema({ timestamps: true })
 export class Bus {
   @Prop({ required: true })
@@ -25,7 +35,7 @@ export class Bus {
     type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Seat' }],
     default: [],
   })
-  seats: Seat[];
+  seats: mongoose.Types.ObjectId[];
 
   @Prop()
   driverName: string;
@@ -33,8 +43,8 @@ export class Bus {
   @Prop({ enum: BusStatus, default: BusStatus.AVAILABLE })
   status: BusStatus;
 
-  @Prop({ type: [String], default: [] })
-  images: string[];
+  @Prop({ type: [BusImageSchema], default: [] })
+  images: BusImage[];
 
   readonly createdAt?: Date;
 
