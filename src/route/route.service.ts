@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ConflictException }
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { plainToClass } from 'class-transformer';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Route, RouteDocument } from './entities/route.entity';
 import { Station, StationDocument } from '../station/entities/station.entity';
 import { Scheduling, SchedulingDocument } from '../scheduling/entities/scheduling.entity';
@@ -12,6 +13,7 @@ import {
     ResourceNotFoundException,
     BusinessLogicException
 } from '../common/exceptions/custom-exceptions';
+import { RouteUpdatedEvent } from '../common/events/scheduling-reindex.event';
 
 @Injectable()
 export class RouteService {
@@ -20,6 +22,7 @@ export class RouteService {
         @InjectModel(Station.name) private stationModel: Model<StationDocument>,
         @InjectModel(Scheduling.name) private schedulingModel: Model<SchedulingDocument>,
         private openStreetMapService: OpenStreetMapService,
+        private readonly eventEmitter: EventEmitter2,
     ) { }
 
     async create(createRouteDto: CreateRouteDto): Promise<Route> {
@@ -126,6 +129,9 @@ export class RouteService {
         if (!updatedRoute) {
             throw new NotFoundException('Không tìm thấy tuyến đường');
         }
+
+        // Emit event để reindex schedulings liên quan
+        this.eventEmitter.emit('route.updated', new RouteUpdatedEvent(id));
 
         return updatedRoute;
     }

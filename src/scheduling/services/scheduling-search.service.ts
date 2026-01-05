@@ -12,7 +12,7 @@ export class SchedulingSearchService implements OnModuleInit {
   constructor(
     @InjectModel(Scheduling.name) private schedulingModel: Model<Scheduling>,
     private readonly searchService: SearchService,
-  ) {}
+  ) { }
 
   async onModuleInit() {
     await this.createIndex();
@@ -141,6 +141,30 @@ export class SchedulingSearchService implements OnModuleInit {
   }
 
   /**
+   * Clear Elasticsearch index (delete all documents)
+   */
+  async clearIndex(): Promise<void> {
+    this.logger.log('Clearing Elasticsearch index...');
+
+    try {
+      // Try to delete index (will fail silently if doesn't exist)
+      try {
+        await this.searchService.deleteIndex(this.INDEX_NAME);
+        this.logger.log(`Deleted index: ${this.INDEX_NAME}`);
+      } catch (error) {
+        this.logger.log(`Index ${this.INDEX_NAME} doesn't exist or already deleted`);
+      }
+
+      // Recreate index with proper mapping
+      await this.createIndex();
+      this.logger.log(`Created fresh index: ${this.INDEX_NAME}`);
+    } catch (error) {
+      this.logger.error('Error clearing index:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Search schedulings with Elasticsearch
    */
   async searchSchedulings(filters: {
@@ -150,8 +174,10 @@ export class SchedulingSearchService implements OnModuleInit {
     routeId?: string;
     page?: number;
     limit?: number;
+    sortBy?: string;
+    sortOrder?: string;
   }): Promise<{ schedulings: any[]; total: number }> {
-    const { query, date, status, routeId, page = 1, limit = 10 } = filters;
+    const { query, date, status, routeId, page = 1, limit = 10, sortBy = 'departureDate', sortOrder = 'asc' } = filters;
     const from = (page - 1) * limit;
 
     const must: any[] = [{ term: { isActive: true } }];
@@ -195,11 +221,15 @@ export class SchedulingSearchService implements OnModuleInit {
       must.push({ term: { routeId } });
     }
 
+    // Dynamic sorting based on sortBy param
+    const sortField = sortBy || 'departureDate';
+    const sortDirection = sortOrder || 'asc';
+
     const searchQuery = {
       query: {
         bool: { must },
       },
-      sort: [{ departureDate: 'asc' }, { etd: 'asc' }],
+      sort: [{ [sortField]: sortDirection }],
     };
 
     const result = await this.searchService.search(

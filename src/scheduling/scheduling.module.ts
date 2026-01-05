@@ -8,29 +8,31 @@ import { Bus, BusSchema } from '../bus/entities/bus.entity';
 import { ExcelProcessingService } from './services/excel-processing.service';
 import { ExcelImportService } from './services/excel-import.service';
 import { SchedulingSearchService } from './services/scheduling-search.service';
+import { SchedulingReindexListener } from './services/scheduling-reindex.listener';
 import { SearchModule } from '../modules/search/search.module';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([
-      { name: Scheduling.name, schema: SchedulingSchema },
-      { name: Route.name, schema: RouteSchema },
-      { name: Bus.name, schema: BusSchema },
-    ]),
-    SearchModule,
-  ],
-  controllers: [SchedulingController],
-  providers: [
-    SchedulingService,
-    ExcelProcessingService,
-    ExcelImportService,
-    SchedulingSearchService,
-  ],
-  exports: [
-    SchedulingService,
-    ExcelProcessingService,
-    ExcelImportService,
-    SchedulingSearchService,
-  ],
+    imports: [
+        MongooseModule.forFeature([
+            { name: Scheduling.name, schema: SchedulingSchema },
+            { name: Route.name, schema: RouteSchema },
+            { name: Bus.name, schema: BusSchema },
+        ]),
+        SearchModule,
+    ],
+    controllers: [SchedulingController],
+    providers: [
+        SchedulingService,
+        ExcelProcessingService,
+        ExcelImportService,
+        SchedulingSearchService,
+        SchedulingReindexListener,
+    ],
+    exports: [
+        SchedulingService,
+        ExcelProcessingService,
+        ExcelImportService,
+        SchedulingSearchService,
+    ],
 })
-export class SchedulingModule {}
+export class SchedulingModule { }
