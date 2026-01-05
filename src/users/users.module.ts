@@ -13,6 +13,7 @@ import { SellerUserStrategy } from './strategies/seller-user.strategy';
 import { CustomerUserStrategy } from './strategies/customer-user.strategy';
 import { UserActivityService } from './user-activity.service';
 import { UserSeedService } from './user-seed.service';
+import { CloudinaryService } from '../common/cloudinary/cloudinary.service';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UserSeedService } from './user-seed.service';
     CustomerUserStrategy,
     UserActivityService,
     UserSeedService,
+    CloudinaryService,
   ],
   exports: [UsersService, UserStrategyFactory, UserActivityService],
 })

@@ -139,6 +139,9 @@ export class UserResponseDto {
   @ApiPropertyOptional()
   lastLoginIp?: string;
 
+  @ApiPropertyOptional({ description: 'User avatar URL' })
+  avatarUrl?: string;
+
   @ApiProperty()
   createdAt: Date;
 

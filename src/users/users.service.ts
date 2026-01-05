@@ -16,6 +16,7 @@ import { UserActivityService } from './user-activity.service';
 import { UserActivityAction } from './enums/user-activity-action.enum';
 import * as bcrypt from 'bcryptjs';
 import { normalizeEmail } from '../common/utils/string-normalizer.util';
+import { CloudinaryService } from '../common/cloudinary/cloudinary.service';
 
 interface UserOperationOptions {
   actorId?: string;
@@ -39,6 +40,7 @@ export class UsersService {
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly userStrategyFactory: UserStrategyFactory,
     private readonly userActivityService: UserActivityService,
+    private readonly cloudinaryService: CloudinaryService,
   ) {}
 
   toResponseDto(user: UserDocument): UserResponseDto {
@@ -53,6 +55,7 @@ export class UsersService {
       emailVerifiedAt: user.emailVerifiedAt,
       lastLoginAt: user.lastLoginAt,
       lastLoginIp: user.lastLoginIp,
+      avatarUrl: user.avatarUrl,
       createdAt: user.createdAt!,
       updatedAt: user.updatedAt!,
     };
@@ -489,6 +492,104 @@ export class UsersService {
         },
       );
     }
+
+    return updatedUser;
+  }
+
+  async updateAvatar(
+    userId: string,
+    file: Express.Multer.File,
+    options?: UserOperationOptions,
+  ): Promise<UserDocument> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Delete old avatar from Cloudinary if exists
+    if (user.avatarUrl) {
+      try {
+        // Extract publicId from avatarUrl
+        const urlParts = user.avatarUrl.split('/');
+        const publicIdWithExtension = urlParts.slice(-2).join('/');
+        const publicId = publicIdWithExtension.replace(/\.[^/.]+$/, '');
+        await this.cloudinaryService.deleteFile(publicId);
+      } catch (error) {
+        // Log error but continue with upload
+        console.error('Failed to delete old avatar:', error);
+      }
+    }
+
+    // Upload new avatar
+    const uploadResult = await this.cloudinaryService.uploadFile(
+      file,
+      'avatars',
+    );
+
+    // Update user with new avatarUrl
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(userId, { avatarUrl: uploadResult.url }, { new: true })
+      .exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.userActivityService.logUserActivity(
+      userId,
+      UserActivityAction.PROFILE_UPDATED,
+      {
+        performedBy: options?.actorId || userId,
+        description: 'Avatar updated',
+        metadata: {
+          avatarUrl: uploadResult.url,
+        },
+      },
+    );
+
+    return updatedUser;
+  }
+
+  async deleteAvatar(
+    userId: string,
+    options?: UserOperationOptions,
+  ): Promise<UserDocument> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.avatarUrl) {
+      throw new NotFoundException('User has no avatar to delete');
+    }
+
+    // Delete avatar from Cloudinary
+    try {
+      const urlParts = user.avatarUrl.split('/');
+      const publicIdWithExtension = urlParts.slice(-2).join('/');
+      const publicId = publicIdWithExtension.replace(/\.[^/.]+$/, '');
+      await this.cloudinaryService.deleteFile(publicId);
+    } catch (error) {
+      console.error('Failed to delete avatar from Cloudinary:', error);
+    }
+
+    // Update user to remove avatarUrl
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(userId, { avatarUrl: null }, { new: true })
+      .exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.userActivityService.logUserActivity(
+      userId,
+      UserActivityAction.PROFILE_UPDATED,
+      {
+        performedBy: options?.actorId || userId,
+        description: 'Avatar deleted',
+      },
+    );
 
     return updatedUser;
   }

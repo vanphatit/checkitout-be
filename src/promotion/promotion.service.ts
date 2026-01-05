@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {
   Injectable,
   NotFoundException,
@@ -85,9 +88,52 @@ export class PromotionService {
     return created.save();
   }
 
+  async getStats(userRole?: UserRole) {
+    const query: any = {};
+
+    // Role-based visibility
+    if (!userRole || userRole === UserRole.CUSTOMER) {
+      // GUEST & CUSTOMER - only active promotions
+      query.isActive = true;
+    }
+    // ADMIN & SELLER - see all promotions
+
+    const [total, active, inactive, typeStats] = await Promise.all([
+      this.promoModel.countDocuments(query).exec(),
+      this.promoModel.countDocuments({ ...query, isActive: true }).exec(),
+      this.promoModel.countDocuments({ ...query, isActive: false }).exec(),
+      this.promoModel
+        .aggregate([
+          { $match: query },
+          { $group: { _id: '$type', count: { $sum: 1 } } },
+        ])
+        .exec(),
+    ]);
+
+    // Transform type stats into a more readable format
+    const typeCount = {
+      [PromotionType.DEFAULT]: 0,
+      [PromotionType.RECURRING]: 0,
+      [PromotionType.SPECIAL]: 0,
+    };
+
+    typeStats.forEach((stat) => {
+      if (stat._id in typeCount) {
+        typeCount[stat._id] = stat.count;
+      }
+    });
+
+    return {
+      total,
+      active,
+      inactive,
+      byType: typeCount,
+    };
+  }
+
   async findAll(
     paginationDto: PaginationDto,
-    userRole: 'CUSTOMER' | 'ADMIN' | 'SELLER',
+    userRole?: UserRole,
   ): Promise<PaginatedResult<Promotion>> {
     const {
       page = 1,
@@ -110,13 +156,15 @@ export class PromotionService {
 
     // Role-based visibility
     if (!userRole || userRole === UserRole.CUSTOMER) {
-      // GUEST (no role) & CUSTOMER
+      // GUEST (no role) & CUSTOMER - always active only
       query.isActive = true;
     } else if (userRole === UserRole.ADMIN || userRole === UserRole.SELLER) {
       // ADMIN & SELLER
       if (isActive !== undefined) {
+        // If isActive is explicitly set, filter by it
         query.isActive = isActive;
       }
+      // If isActive is not set, return all (both active and inactive)
     }
 
     const sort: any = {};
@@ -239,6 +287,25 @@ export class PromotionService {
 
     return {
       message: 'Promotion disabled successfully',
+    };
+  }
+
+  async enable(id: string) {
+    const existing = await this.promoModel.findById(id).exec();
+    if (!existing) {
+      throw new NotFoundException('Promotion not found');
+    }
+
+    // Nếu đã active rồi
+    if (existing.isActive) {
+      throw new BadRequestException('Promotion is already enabled');
+    }
+
+    existing.isActive = true;
+    await existing.save();
+
+    return {
+      message: 'Promotion enabled successfully',
     };
   }
 
