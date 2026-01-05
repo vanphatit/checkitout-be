@@ -6,6 +6,8 @@ import { AuthModule } from 'src/auth/auth.module';
 import { Bus, BusSchema } from '../bus/entities/bus.entity';
 import { Seat, SeatSchema } from '../seat/entities/seat.entity';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SeatGateway } from './gateways/seat.gateway';
+import { SeatLockService } from './services/seat-lock.service';
 
 @Module({
   imports: [
@@ -13,8 +15,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
     MongooseModule.forFeature([{ name: Bus.name, schema: BusSchema }]),
     AuthModule,
   ],
-  providers: [SeatService, JwtAuthGuard],
+  providers: [SeatService, SeatLockService, SeatGateway, JwtAuthGuard],
   controllers: [SeatController],
-  exports: [SeatService],
+  exports: [SeatService, SeatLockService, SeatGateway],
 })
-export class SeatModule {}
+export class SeatModule { }
