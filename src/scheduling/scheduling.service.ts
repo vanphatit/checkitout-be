@@ -131,8 +131,14 @@ export class SchedulingService {
         routeId?: string;
         date?: string;
         status?: string;
+        includeDeleted?: boolean;
     }): Promise<Scheduling[]> {
-        const query: any = { isDeleted: false };
+        const query: any = {};
+
+        // Only filter by isDeleted if not including deleted items
+        if (!filters?.includeDeleted) {
+            query.isDeleted = false;
+        }
 
         if (filters?.routeId) {
             query.routeId = new Types.ObjectId(filters.routeId);
@@ -161,15 +167,6 @@ export class SchedulingService {
             .exec();
     }
 
-    async findByIds(ids: string[]): Promise<Scheduling[]> {
-        return await this.schedulingModel
-            .find({ _id: { $in: ids.map(id => new Types.ObjectId(id)) } })
-            .populate('routeId', 'name distance estimatedDuration')
-            .populate('busIds', 'plateNo seats status type')
-            .sort({ departureDate: 1, etd: 1 })
-            .exec();
-    }
-
     async findOne(id: string): Promise<Scheduling> {
         const scheduling = await this.schedulingModel
             .findById(id)
@@ -188,6 +185,30 @@ export class SchedulingService {
         }
 
         return scheduling;
+    }
+
+    async findByIds(ids: string[], includeDeleted = false): Promise<Scheduling[]> {
+        const query: any = {
+            _id: { $in: ids.map(id => new Types.ObjectId(id)) }
+        };
+
+        // Only filter by isDeleted if not including deleted items
+        if (!includeDeleted) {
+            query.isDeleted = false;
+        }
+
+        return await this.schedulingModel
+            .find(query)
+            .populate({
+                path: 'routeId',
+                populate: {
+                    path: 'stationIds',
+                    select: 'name address location isActive'
+                }
+            })
+            .populate('busIds')
+            .sort({ departureDate: 1, etd: 1 })
+            .exec();
     }
 
     async update(id: string, updateSchedulingDto: UpdateSchedulingDto): Promise<Scheduling> {
@@ -249,22 +270,122 @@ export class SchedulingService {
             throw new NotFoundException('Không tìm thấy lịch trình');
         }
 
+        // Update in Elasticsearch
+        try {
+            await this.schedulingSearchService.updateScheduling(id, updatedScheduling);
+        } catch (error) {
+            this.logger.warn(`Failed to update scheduling ${id} in Elasticsearch: ${error.message}`);
+        }
+
         return updatedScheduling;
     }
 
     async remove(id: string): Promise<void> {
+        const scheduling = await this.schedulingModel.findById(id).exec();
+
+        if (!scheduling) {
+            throw new NotFoundException('Không tìm thấy lịch trình');
+        }
+
+        if (scheduling.isDeleted) {
+            throw new BadRequestException('Lịch trình đã bị xóa trước đó');
+        }
+
+        // Check if there are any tickets for this scheduling
+        // Note: Assuming you have Ticket model - adjust import and model name as needed
+        // const ticketCount = await this.ticketModel.countDocuments({ schedulingId: id, status: { $ne: 'cancelled' } }).exec();
+        // if (ticketCount > 0) {
+        //     throw new BadRequestException(`Không thể xóa lịch trình này vì có ${ticketCount} vé đang sử dụng`);
+        // }
+
+        // Soft delete - set isDeleted to true
         const result = await this.schedulingModel
-            .findByIdAndUpdate(id, { isActive: false }, { new: true })
+            .findByIdAndUpdate(id, {
+                isDeleted: true,
+                isActive: false,
+                status: 'cancelled'
+            }, { new: true })
             .exec();
 
         if (!result) {
             throw new NotFoundException('Không tìm thấy lịch trình');
         }
+
+        // Try to remove from Elasticsearch
+        try {
+            await this.schedulingSearchService.deleteScheduling(id);
+        } catch (error) {
+            this.logger.warn(`Failed to delete scheduling ${id} from Elasticsearch: ${error.message}`);
+        }
+    }
+
+    async restore(id: string): Promise<Scheduling> {
+        const scheduling = await this.schedulingModel.findById(id).exec();
+
+        if (!scheduling) {
+            throw new NotFoundException('Không tìm thấy lịch trình');
+        }
+
+        if (!scheduling.isDeleted) {
+            throw new BadRequestException('Lịch trình chưa bị xóa');
+        }
+
+        // Restore - set isDeleted to false
+        const result = await this.schedulingModel
+            .findByIdAndUpdate(id, {
+                isDeleted: false,
+                isActive: true,
+                status: 'scheduled'
+            }, { new: true })
+            .populate({
+                path: 'routeId',
+                populate: { path: 'stationIds', select: 'name address location isActive' }
+            })
+            .populate('busIds')
+            .exec();
+
+        if (!result) {
+            throw new NotFoundException('Không tìm thấy lịch trình');
+        }
+
+        // Try to reindex in Elasticsearch
+        try {
+            await this.schedulingSearchService.indexScheduling(result);
+        } catch (error) {
+            this.logger.warn(`Failed to reindex scheduling ${id} in Elasticsearch: ${error.message}`);
+        }
+
+        return result;
+    }
+
+    async getStats(): Promise<any> {
+        const [total, active, inactive, deleted, scheduled, inProgress, completed, cancelled] = await Promise.all([
+            this.schedulingModel.countDocuments({}).exec(),
+            this.schedulingModel.countDocuments({ isActive: true, isDeleted: false }).exec(),
+            this.schedulingModel.countDocuments({ isActive: false, isDeleted: false }).exec(),
+            this.schedulingModel.countDocuments({ isDeleted: true }).exec(),
+            this.schedulingModel.countDocuments({ status: 'scheduled', isDeleted: false }).exec(),
+            this.schedulingModel.countDocuments({ status: 'in-progress', isDeleted: false }).exec(),
+            this.schedulingModel.countDocuments({ status: 'completed', isDeleted: false }).exec(),
+            this.schedulingModel.countDocuments({ status: 'cancelled', isDeleted: false }).exec(),
+        ]);
+
+        return {
+            total,
+            active,
+            inactive,
+            deleted,
+            scheduled,
+            inProgress,
+            completed,
+            cancelled,
+            delayed: total - scheduled - inProgress - completed - cancelled - deleted
+        };
     }
 
     async findByRoute(routeId: string, date?: string): Promise<Scheduling[]> {
         const query: any = {
-            routeId: new Types.ObjectId(routeId),
+            routeId: routeId, // Use string directly, not ObjectId
             isDeleted: false,
             isActive: true
         };
@@ -290,6 +411,7 @@ export class SchedulingService {
             .sort({ etd: 1 })
             .exec();
     }
+
 
     async findAvailable(routeId: string, date: string): Promise<Scheduling[]> {
         return await this.schedulingModel
@@ -344,6 +466,13 @@ export class SchedulingService {
 
         if (!result) {
             throw new NotFoundException('Không thể cập nhật lịch trình');
+        }
+
+        // Update seat count in Elasticsearch
+        try {
+            await this.schedulingSearchService.updateScheduling(id, result);
+        } catch (error) {
+            this.logger.warn(`Failed to update seat count for scheduling ${id} in Elasticsearch: ${error.message}`);
         }
 
         return result;

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Bus, BusDocument, BusImage } from '../bus/entities/bus.entity';
 import { BusImageDto, CreateBusDto } from './dto/create-bus.dto';
 import { UpdateBusDto } from './dto/update-bus.dto';
@@ -16,6 +17,7 @@ import { PaginationDto } from './dto/bus-pagination.dto';
 import { SortOrder } from 'mongoose';
 import { Seat } from 'src/seat/entities/seat.entity';
 import { CloudinaryService } from 'src/common/cloudinary/cloudinary.service';
+import { BusUpdatedEvent } from '../common/events/scheduling-reindex.event';
 
 @Injectable()
 export class BusService {
@@ -25,6 +27,7 @@ export class BusService {
 
     private readonly excelService: ExcelService,
     private readonly cloudinaryService: CloudinaryService,
+    private readonly eventEmitter: EventEmitter2,
   ) { }
   async create(createBusDto: CreateBusDto): Promise<Bus> {
     const bus = new this.busModel(createBusDto);
@@ -214,7 +217,12 @@ export class BusService {
     Object.assign(bus, updateBusDto);
 
     // 4. Lưu lại
-    return await bus.save();
+    const updatedBus = await bus.save();
+
+    // 5. Emit event để reindex schedulings liên quan
+    this.eventEmitter.emit('bus.updated', new BusUpdatedEvent(id));
+
+    return updatedBus;
   }
 
   async removeImage(busId: string, publicId: string): Promise<Bus> {

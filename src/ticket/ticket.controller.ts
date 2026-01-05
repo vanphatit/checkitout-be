@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Req,
+  Res,
   BadRequestException,
 } from '@nestjs/common';
 import {
@@ -18,7 +19,7 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { TicketService } from './ticket.service';
 import { CreateTicketDto } from '../ticket/dto/create-ticket.dto';
 import { UpdateTicketStatusDto } from '../ticket/dto/update-ticket-status.dto';
@@ -293,6 +294,35 @@ export class TicketController {
   @ApiResponse({ status: 404, description: 'Ticket not found' })
   findOne(@Param('id') id: string) {
     return this.ticketService.findOne(id);
+  }
+
+  @Get(':id/qrcode')
+  @ApiOperation({
+    summary: 'Generate QR code for ticket',
+    description:
+      'Generate QR code containing ticket information. Returns QR code as PNG image.',
+  })
+  @ApiParam({ name: 'id', description: 'Ticket ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'QR code image',
+    content: {
+      'image/png': {
+        schema: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Ticket not found' })
+  async generateQRCode(@Param('id') id: string, @Res() res: Response) {
+    const qrBuffer = await this.ticketService.generateQRCode(id);
+    res.set({
+      'Content-Type': 'image/png',
+      'Content-Length': qrBuffer.length,
+    });
+    res.send(qrBuffer);
   }
 
   @Patch(':id/status')

@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
+import * as QRCode from 'qrcode';
 import {
   Ticket,
   TicketDocument,
@@ -30,6 +31,18 @@ import { TicketQueryDto } from './dto/ticket-query.dto';
 import { PaginatedResult } from '../common/dto/pagination.dto';
 import { SeatStatus } from '../seat/enums/seat-status.enum';
 import { VNPayService } from '../vnpay/vnpay.service';
+import { Seat } from '../seat/entities/seat.entity';
+import { Promotion } from '../promotion/entities/promotion.entity';
+
+// Type helper for populated ticket documents
+type TicketPopulated = TicketDocument & {
+  userId: UserDocument;
+  seatId: Seat & { _id: Types.ObjectId };
+  schedulingId: SchedulingDocument;
+  promotionId?: Promotion & { _id: Types.ObjectId };
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 @Injectable()
 export class TicketService {
@@ -1329,5 +1342,57 @@ export class TicketService {
         hasPrevPage: page > 1,
       },
     };
+  }
+
+  // ============================================
+  // QR CODE GENERATION
+  // ============================================
+
+  /**
+   * Generate QR code for ticket
+   * Contains ticket verification information
+   */
+  async generateQRCode(ticketId: string): Promise<Buffer> {
+    const ticketDoc = await this.ticketModel
+      .findById(ticketId)
+      .populate('userId', 'firstName lastName phone email')
+      .populate('seatId', 'seatNo')
+      .populate('schedulingId', 'departureDate arrivalDate etd eta')
+      .exec();
+
+    if (!ticketDoc) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    // Cast to populated type for type safety
+    const ticket = ticketDoc as unknown as TicketPopulated;
+
+    // Create QR code data with ticket information
+    const qrData = {
+      ticketId: String(ticket._id),
+      transactionId: ticket.transactionId,
+      passengerName: `${ticket.userId.firstName} ${ticket.userId.lastName}`,
+      phone: ticket.userId.phone,
+      seatNo: ticket.seatId.seatNo,
+      departureDate: ticket.schedulingId.departureDate,
+      etd: ticket.schedulingId.etd,
+      totalPrice: ticket.totalPrice,
+      status: ticket.status,
+      createdAt: ticket.createdAt,
+    };
+
+    // Generate QR code as buffer
+    try {
+      const qrBuffer = await QRCode.toBuffer(JSON.stringify(qrData), {
+        type: 'png',
+        width: 300,
+        margin: 2,
+        errorCorrectionLevel: 'H',
+      });
+
+      return qrBuffer;
+    } catch (error) {
+      throw new BadRequestException('Failed to generate QR code');
+    }
   }
 }

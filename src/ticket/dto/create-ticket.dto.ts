@@ -14,14 +14,14 @@ import {
 } from '../../auth/constants/validation.constants';
 
 export class CreateTicketDto {
-  @ApiProperty({
-    description: 'Customer phone number (required)',
+  @ApiPropertyOptional({
+    description: 'Customer phone number (optional for CUSTOMER role, required for ADMIN/SELLER)',
     example: '+1234567890',
   })
-  @IsNotEmpty()
+  @IsOptional()
   @IsString()
   @Matches(PHONE_REGEX, { message: PHONE_VALIDATION_MESSAGE })
-  phone: string;
+  phone?: string;
 
   @ApiPropertyOptional({
     description:

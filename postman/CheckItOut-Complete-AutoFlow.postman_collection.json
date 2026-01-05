@@ -64,13 +64,83 @@
                     "name": "2. Register Customer",
                     "event": [
                         {
+                            "listen": "prerequest",
+                            "script": {
+                                "exec": [
+                                    "// Generate valid customer data",
+                                    "const timestamp = Date.now();",
+                                    "const randomNum = Math.floor(Math.random() * 10000);",
+                                    "",
+                                    "// Generate valid email",
+                                    "const email = `customer_${timestamp}_${randomNum}@checkitout.test`;",
+                                    "pm.environment.set('newCustomerEmail', email);",
+                                    "",
+                                    "// Generate strong password (8+ chars, uppercase, lowercase, number, special char)",
+                                    "const password = `Test@${randomNum}Pass`;",
+                                    "pm.environment.set('newCustomerPassword', password);",
+                                    "",
+                                    "// Generate valid Vietnamese phone number (10 digits, starts with 0)",
+                                    "const phonePrefix = ['090', '091', '093', '094', '097', '098', '032', '033', '034', '035', '036', '037', '038', '039', '070', '079', '077', '076', '078', '083', '084', '085', '081', '082', '088', '056', '058', '059'];",
+                                    "const prefix = phonePrefix[Math.floor(Math.random() * phonePrefix.length)];",
+                                    "const suffix = Math.floor(Math.random() * 10000000).toString().padStart(7, '0');",
+                                    "const phone = prefix + suffix;",
+                                    "pm.environment.set('newCustomerPhone', phone);",
+                                    "",
+                                    "// Generate Vietnamese firstName and lastName (2-50 chars each)",
+                                    "const firstNames = ['An', 'Bình', 'Hùng', 'Dũng', 'Long', 'Linh', 'Mai', 'Lan', 'Hoa', 'Phương', 'Minh', 'Thành', 'Tuấn', 'Hải', 'Anh'];",
+                                    "const lastNames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Huỳnh', 'Võ', 'Phan', 'Vũ', 'Đặng'];",
+                                    "const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];",
+                                    "const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];",
+                                    "pm.environment.set('newCustomerFirstName', firstName);",
+                                    "pm.environment.set('newCustomerLastName', lastName);",
+                                    "",
+                                    "console.log('✨ Generated valid customer data:');",
+                                    "console.log('📧 Email: ' + email);",
+                                    "console.log('🔑 Password: ' + password);",
+                                    "console.log('📱 Phone: ' + phone);",
+                                    "console.log('👤 First Name: ' + firstName);",
+                                    "console.log('👤 Last Name: ' + lastName);"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        },
+                        {
                             "listen": "test",
                             "script": {
                                 "exec": [
                                     "if (pm.response.code === 201) {",
                                     "    console.log('✅ Customer registration successful');",
+                                    "    ",
+                                    "    // Save credentials to environment for later use",
+                                    "    const email = pm.environment.get('newCustomerEmail');",
+                                    "    const password = pm.environment.get('newCustomerPassword');",
+                                    "    ",
+                                    "    pm.environment.set('customerEmail', email);",
+                                    "    pm.environment.set('customerPassword', password);",
+                                    "    ",
+                                    "    console.log('💾 Saved customer credentials to environment');",
+                                    "    console.log('📧 Email: ' + email);",
+                                    "    console.log('🔑 Password: ' + password);",
+                                    "    ",
+                                    "    // Try to get customer ID from response",
+                                    "    try {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        if (jsonData.data && jsonData.data._id) {",
+                                    "            pm.environment.set('customerId', jsonData.data._id);",
+                                    "            console.log('🆔 Customer ID: ' + jsonData.data._id);",
+                                    "        }",
+                                    "    } catch (e) {",
+                                    "        console.log('⚠️ Could not extract customer ID from response');",
+                                    "    }",
                                     "} else {",
                                     "    console.log('❌ Customer registration failed');",
+                                    "    console.log('📊 Status: ' + pm.response.code);",
+                                    "    try {",
+                                    "        const errorData = pm.response.json();",
+                                    "        console.log('💬 Error: ' + JSON.stringify(errorData));",
+                                    "    } catch (e) {",
+                                    "        console.log('💬 Error parsing response');",
+                                    "    }",
                                     "}"
                                 ],
                                 "type": "text/javascript"
@@ -87,7 +157,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"email\": \"customer{{$randomInt}}@example.com\",\n  \"password\": \"Password123!\",\n  \"fullName\": \"Nguyễn Văn Test\",\n  \"phone\": \"0901234567\",\n  \"address\": \"123 Đường Test, TP.HCM\"\n}"
+                            "raw": "{\n  \"email\": \"{{newCustomerEmail}}\",\n  \"password\": \"{{newCustomerPassword}}\",\n  \"firstName\": \"{{newCustomerFirstName}}\",\n  \"lastName\": \"{{newCustomerLastName}}\",\n  \"phone\": \"{{newCustomerPhone}}\"\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/auth/register",
@@ -99,12 +169,32 @@
                                 "register"
                             ]
                         },
-                        "description": "Đăng ký tài khoản khách hàng mới.\n\n**Lưu ý:** Có thể bỏ qua step này vì đã có sẵn customer accounts từ seeder."
+                        "description": "Đăng ký tài khoản khách hàng mới với data được generate tự động.\n\n**Auto-generated:**\n- Email: Valid format với timestamp\n- Password: Đạt yêu cầu (8+ chars, uppercase, lowercase, number, special char)\n- Phone: Số điện thoại Việt Nam hợp lệ (10 số)\n- First Name: Tên tiếng Việt có dấu (2-50 chars)\n- Last Name: Họ tiếng Việt có dấu (2-50 chars)\n\n**Credentials được lưu vào environment:**\n- `customerEmail`\n- `customerPassword`\n- `customerId`"
                     }
                 },
                 {
                     "name": "3. Login Customer",
                     "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "exec": [
+                                    "// Check if we have registered customer credentials",
+                                    "const regEmail = pm.environment.get('customerEmail');",
+                                    "const regPassword = pm.environment.get('customerPassword');",
+                                    "",
+                                    "if (regEmail && regPassword) {",
+                                    "    console.log('✅ Using registered customer credentials');",
+                                    "    console.log('📧 Email: ' + regEmail);",
+                                    "} else {",
+                                    "    console.log('⚠️ No registered credentials found, using default seeded account');",
+                                    "    pm.environment.set('customerEmail', 'user1@checkitout.com');",
+                                    "    pm.environment.set('customerPassword', 'User123!');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        },
                         {
                             "listen": "test",
                             "script": {
@@ -112,12 +202,21 @@
                                     "if (pm.response.code === 200) {",
                                     "    var jsonData = pm.response.json();",
                                     "    if (jsonData.data && jsonData.data.accessToken) {",
-                                    "        pm.collectionVariables.set('customerToken', jsonData.data.accessToken);",
-                                    "        pm.collectionVariables.set('customerId', jsonData.data.user.id);",
+                                    "        pm.environment.set('customerToken', jsonData.data.accessToken);",
+                                    "        pm.environment.set('customerId', jsonData.data.user.id);",
                                     "        console.log('✅ Customer login successful');",
+                                    "        console.log('🔑 Token: ' + jsonData.data.accessToken.substring(0, 20) + '...');",
+                                    "        console.log('🆔 Customer ID: ' + jsonData.data.user.id);",
                                     "    }",
                                     "} else {",
                                     "    console.log('❌ Customer login failed');",
+                                    "    console.log('📊 Status: ' + pm.response.code);",
+                                    "    try {",
+                                    "        const errorData = pm.response.json();",
+                                    "        console.log('💬 Error: ' + JSON.stringify(errorData));",
+                                    "    } catch (e) {",
+                                    "        console.log('💬 Error parsing response');",
+                                    "    }",
                                     "}"
                                 ],
                                 "type": "text/javascript"
@@ -134,7 +233,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"email\": \"user1@checkitout.com\",\n  \"password\": \"User123!\"\n}"
+                            "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/auth/login",
@@ -146,7 +245,7 @@
                                 "login"
                             ]
                         },
-                        "description": "Đăng nhập với tài khoản customer có sẵn từ seeder.\n\n**Credentials:**\n- Email: user1@checkitout.com\n- Password: User123!"
+                        "description": "Đăng nhập với tài khoản customer.\n\n**Auto-detection:**\n- Nếu vừa register (có `customerEmail` và `customerPassword`): Dùng credentials vừa tạo\n- Nếu không: Dùng default seeded account (user1@checkitout.com)\n\n**Saves to environment:**\n- `customerToken` - Access token\n- `customerId` - User ID"
                     }
                 }
             ],
