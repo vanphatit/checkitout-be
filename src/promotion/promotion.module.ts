@@ -8,10 +8,14 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PromotionSeeder } from './promotion.seeder';
 
 @Module({
-	imports: [MongooseModule.forFeature([{ name: Promotion.name, schema: PromotionSchema }]), AuthModule],
-	providers: [PromotionService, JwtAuthGuard, PromotionSeeder],
-	controllers: [PromotionController],
-	exports: [PromotionService,  PromotionSeeder],
+  imports: [
+    MongooseModule.forFeature([
+      { name: Promotion.name, schema: PromotionSchema },
+    ]),
+    AuthModule,
+  ],
+  providers: [PromotionService, JwtAuthGuard, PromotionSeeder],
+  controllers: [PromotionController],
+  exports: [PromotionService, PromotionSeeder],
 })
 export class PromotionModule {}
-

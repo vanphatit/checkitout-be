@@ -6,12 +6,16 @@ import { TicketController } from './ticket.controller';
 import { TicketCronService } from '../ticket/ticket-cron.service';
 import { Ticket, TicketSchema } from './entities/ticket.entity';
 import { Seat, SeatSchema } from '../seat/entities/seat.entity';
-import { Scheduling, SchedulingSchema } from '../scheduling/entities/scheduling.entity';
+import {
+  Scheduling,
+  SchedulingSchema,
+} from '../scheduling/entities/scheduling.entity';
 import { Route, RouteSchema } from '../route/entities/route.entity';
 import { User, UserSchema } from '../users/entities/user.entity';
 import { PromotionModule } from '../promotion/promotion.module';
 import { AuthModule } from '../auth/auth.module';
 import { SeatModule } from '../seat/seat.module';
+import { UsersModule } from '../users/users.module';
 import { VNPayService } from '../vnpay/vnpay.service';
 
 @Module({
@@ -27,6 +31,7 @@ import { VNPayService } from '../vnpay/vnpay.service';
     PromotionModule,
     AuthModule,
     SeatModule,
+    UsersModule,
   ],
   providers: [TicketService, TicketCronService, VNPayService],
   controllers: [TicketController],

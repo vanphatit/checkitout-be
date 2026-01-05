@@ -3,6 +3,7 @@ import { IUserStrategy } from './user-strategy.interface';
 import { UserRole } from '../enums/user-role.enum';
 import { CreateUserDto, UpdateUserDto } from '../dto/user.dto';
 import { UserDocument } from '../entities/user.entity';
+import { PHONE_REGEX } from 'src/auth/constants/validation.constants';
 
 @Injectable()
 export class CustomerUserStrategy implements IUserStrategy {
@@ -10,30 +11,25 @@ export class CustomerUserStrategy implements IUserStrategy {
     return UserRole.CUSTOMER;
   }
 
-  async validateCreationData(userData: CreateUserDto): Promise<void> {
+  validateCreationData(userData: CreateUserDto): Promise<void> {
     // Customer-specific validation (minimal requirements)
     // Phone is optional for customers
     if (userData.phone) {
-      const phoneRegex = /^[+]?[1-9]\d{1,14}$/;
-      if (!phoneRegex.test(userData.phone)) {
+      if (!PHONE_REGEX.test(userData.phone)) {
         throw new BadRequestException('Invalid phone number format');
       }
     }
+    return Promise.resolve();
   }
 
-  async processCreationData(
-    userData: CreateUserDto,
-  ): Promise<Partial<UserDocument>> {
-    return {
+  processCreationData(userData: CreateUserDto): Promise<Partial<UserDocument>> {
+    return Promise.resolve({
       ...userData,
       role: UserRole.CUSTOMER,
-    };
+    });
   }
 
-  async validateUpdateData(
-    userData: UpdateUserDto,
-    currentUser: UserDocument,
-  ): Promise<void> {
+  validateUpdateData(userData: UpdateUserDto): Promise<void> {
     // Customers can upgrade to seller but need approval
     if (userData.role && userData.role === UserRole.SELLER) {
       // This would trigger a seller application process
@@ -41,12 +37,10 @@ export class CustomerUserStrategy implements IUserStrategy {
     } else if (userData.role && userData.role === UserRole.ADMIN) {
       throw new BadRequestException('Cannot upgrade to Admin role');
     }
+    return Promise.resolve();
   }
 
-  async processUpdateData(
-    userData: UpdateUserDto,
-    currentUser: UserDocument,
-  ): Promise<Partial<UserDocument>> {
-    return { ...userData };
+  processUpdateData(userData: UpdateUserDto): Promise<Partial<UserDocument>> {
+    return Promise.resolve({ ...userData });
   }
 }

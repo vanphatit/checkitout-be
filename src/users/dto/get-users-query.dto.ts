@@ -19,7 +19,9 @@ export class GetUsersQueryDto {
   @Min(1)
   limit?: number = 10;
 
-  @ApiPropertyOptional({ description: 'Search by email, first name, or last name' })
+  @ApiPropertyOptional({
+    description: 'Search by email, first name, or last name',
+  })
   @IsOptional()
   @IsString()
   search?: string;

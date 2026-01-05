@@ -1,27 +1,33 @@
-import { IsNotEmpty, IsMongoId, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TransferTicketDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'New Scheduling ID (must be same route)',
-    example: '507f1f77bcf86cd799439014'
+    example: '507f1f77bcf86cd799439014',
   })
   @IsNotEmpty()
   @IsMongoId()
   newSchedulingId: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'New Seat ID (on the new scheduling)',
-    example: '507f1f77bcf86cd799439015'
+    example: '507f1f77bcf86cd799439015',
   })
   @IsNotEmpty()
   @IsMongoId()
   newSeatId: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Reason for transfer (optional)',
     example: 'Customer requested schedule change due to personal emergency',
-    maxLength: 500
+    maxLength: 500,
   })
   @IsOptional()
   @IsString()

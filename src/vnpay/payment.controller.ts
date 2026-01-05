@@ -1,16 +1,16 @@
-import { 
-  Controller, 
-  Post, 
-  Get, 
-  Param, 
-  Query, 
-  Req, 
-  UseGuards 
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  Query,
+  Req,
+  UseGuards,
 } from '@nestjs/common';
-import { 
-  ApiTags, 
-  ApiBearerAuth, 
-  ApiOperation, 
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
   ApiResponse,
   ApiParam,
   ApiQuery,
@@ -31,24 +31,28 @@ export class PaymentController {
   @Post('create/:ticketId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Create VNPay payment URL',
-    description: 'Generate VNPay payment URL for PENDING ticket. Returns payment URL to redirect user.'
+    description:
+      'Generate VNPay payment URL for PENDING ticket. Returns payment URL to redirect user.',
   })
   @ApiParam({ name: 'ticketId', description: 'Ticket ID' })
   @ApiResponse({ status: 200, description: 'Payment URL created successfully' })
-  @ApiResponse({ status: 400, description: 'Ticket not in PENDING status or expired' })
+  @ApiResponse({
+    status: 400,
+    description: 'Ticket not in PENDING status or expired',
+  })
   @ApiResponse({ status: 404, description: 'Ticket not found' })
   async createPaymentUrl(
     @Param('ticketId') ticketId: string,
-    @Req() req: Request
+    @Req() req: Request,
   ) {
     // Get client IP address
-    const ipAddr = (req.ip || 
-                    req.headers['x-forwarded-for'] || 
-                    req.socket.remoteAddress || 
-                    '127.0.0.1') as string;
-    
+    const ipAddr = (req.ip ||
+      req.headers['x-forwarded-for'] ||
+      req.socket.remoteAddress ||
+      '127.0.0.1') as string;
+
     // Logic thực tế: Lấy ticket từ DB và tạo payment URL
     // Không hardcode gì cả, mọi thứ đều từ database
     return await this.ticketService.createPaymentUrl(ticketId, ipAddr);
@@ -59,13 +63,25 @@ export class PaymentController {
    * Logic: Verify signature -> Lấy ticket từ transactionId -> Update status -> Return full ticket data
    */
   @Get('vnpay-return')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'VNPay callback endpoint',
-    description: 'Endpoint for VNPay to callback after payment. Returns payment result and ticket info from database.'
+    description:
+      'Endpoint for VNPay to callback after payment. Returns payment result and ticket info from database.',
   })
-  @ApiQuery({ name: 'vnp_TxnRef', required: true, description: 'Transaction Reference' })
-  @ApiQuery({ name: 'vnp_ResponseCode', required: true, description: 'Response Code (00 = success)' })
-  @ApiResponse({ status: 200, description: 'Payment result with full ticket data from database' })
+  @ApiQuery({
+    name: 'vnp_TxnRef',
+    required: true,
+    description: 'Transaction Reference',
+  })
+  @ApiQuery({
+    name: 'vnp_ResponseCode',
+    required: true,
+    description: 'Response Code (00 = success)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Payment result with full ticket data from database',
+  })
   @ApiResponse({ status: 400, description: 'Invalid signature or bad request' })
   @ApiResponse({ status: 404, description: 'Ticket not found' })
   async vnpayReturn(@Query() query: any) {
@@ -76,7 +92,7 @@ export class PaymentController {
     // 4. Create snapshot nếu chưa có
     // 5. Update seat status
     // 6. Return FULL ticket data từ DB với populate đầy đủ
-    // 
+    //
     // → Không có hardcode data nào cả!
     return await this.ticketService.handleVNPayCallback(query);
   }
@@ -88,9 +104,9 @@ export class PaymentController {
   @Get('status/:ticketId')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get payment status',
-    description: 'Check payment status of a ticket from database'
+    description: 'Check payment status of a ticket from database',
   })
   @ApiParam({ name: 'ticketId', description: 'Ticket ID' })
   @ApiResponse({ status: 200, description: 'Payment status from database' })
@@ -101,4 +117,3 @@ export class PaymentController {
     return await this.ticketService.getPaymentStatus(ticketId);
   }
 }
-

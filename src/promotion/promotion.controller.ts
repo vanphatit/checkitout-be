@@ -1,13 +1,13 @@
 import {
-    Controller,
-    Post,
-    Body,
-    Get, 
-    Param,
-    Patch,
-    UseGuards,
-    Query, 
-    Req,
+  Controller,
+  Post,
+  Body,
+  Get,
+  Param,
+  Patch,
+  UseGuards,
+  Query,
+  Req,
 } from '@nestjs/common';
 import { PromotionService } from './promotion.service';
 import { CreatePromotionDto } from './dto/create-promotion.dto';
@@ -16,7 +16,14 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiQuery, ApiOkResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiOkResponse,
+} from '@nestjs/swagger';
 import { PaginatedResult } from 'src/common/dto/pagination.dto';
 import { Promotion } from './entities/promotion.entity';
 import { PaginationDto } from 'src/common/dto/pagination.dto';

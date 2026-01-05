@@ -1466,7 +1466,7 @@
                         ],
                         "body": {
                             "mode": "raw",
-                            "raw": "{\n  \"firstName\": \"Nguyễn Văn\",\n  \"lastName\": \"Updated\",\n  \"phone\": \"+84909999999\"\n}"
+                            "raw": "{\n  \"firstName\": \"Nguyễn Văn\",\n  \"lastName\": \"Updated\",\n  \"phone\": \"0909999999\"\n}"
                         },
                         "url": {
                             "raw": "{{baseUrl}}/users/profile",

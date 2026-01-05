@@ -1,16 +1,27 @@
-import { 
-  Injectable, 
-  BadRequestException, 
-  NotFoundException 
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Ticket, TicketDocument, TicketSnapshot } from './entities/ticket.entity';
+import {
+  Ticket,
+  TicketDocument,
+  TicketSnapshot,
+} from './entities/ticket.entity';
 import { TicketStatus } from './enums/ticket-status.enum';
 import { SeatService } from '../seat/seat.service';
-import { Scheduling, SchedulingDocument } from '../scheduling/entities/scheduling.entity';
+import {
+  Scheduling,
+  SchedulingDocument,
+} from '../scheduling/entities/scheduling.entity';
 import { Route, RouteDocument } from '../route/entities/route.entity';
 import { User, UserDocument } from '../users/entities/user.entity';
+import { UserStatus } from '../users/enums/user-status.enum';
+import { UserRole } from '../users/enums/user-role.enum';
+import { UserActivityService } from '../users/user-activity.service';
+import { UserActivityAction } from '../users/enums/user-activity-action.enum';
 import { PromotionService } from '../promotion/promotion.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketStatusDto } from './dto/update-ticket-status.dto';
@@ -24,13 +35,15 @@ import { VNPayService } from '../vnpay/vnpay.service';
 export class TicketService {
   constructor(
     @InjectModel(Ticket.name) private ticketModel: Model<TicketDocument>,
-    @InjectModel(Scheduling.name) private schedulingModel: Model<SchedulingDocument>,
+    @InjectModel(Scheduling.name)
+    private schedulingModel: Model<SchedulingDocument>,
     @InjectModel(Route.name) private routeModel: Model<RouteDocument>,
     @InjectModel(User.name) private userModel: Model<UserDocument>,
     private readonly seatService: SeatService,
     private readonly promotionService: PromotionService,
     private readonly vnpayService: VNPayService,
-  ) { }
+    private readonly userActivityService: UserActivityService,
+  ) {}
 
   // ============================================
   // BUILD SNAPSHOT - Core Logic
@@ -72,7 +85,7 @@ export class TicketService {
     const originalPrice = scheduling.price;
     const discountAmount = this.promotionService.calculateDiscount(
       originalPrice,
-      promotion.value
+      promotion.value,
     );
 
     const snapshot: TicketSnapshot = {
@@ -103,7 +116,7 @@ export class TicketService {
         etd: route.etd,
       },
       promotion: {
-        promotionId: (promotion._id as Types.ObjectId).toString(),
+        promotionId: promotion._id.toString(),
         name: promotion.name,
         value: promotion.value,
         type: promotion.type,
@@ -122,26 +135,70 @@ export class TicketService {
   }
 
   // ============================================
-  // CREATE TICKET (using email)
+  // CREATE TICKET (using phone with auto-user-creation)
   // ============================================
   async create(dto: CreateTicketDto) {
-    // 1. Find user by email
-    if (!dto.email) {
-      throw new BadRequestException('Email is required');
+    // 1. Find or create user by phone (atomic operation using upsert)
+    const user = await this.userModel
+      .findOneAndUpdate(
+        { phone: dto.phone },
+        {
+          $setOnInsert: {
+            phone: dto.phone,
+            firstName: dto.firstName || 'Guest',
+            lastName: dto.lastName || 'Customer',
+            status: UserStatus.PRE_REGISTERED,
+            role: UserRole.CUSTOMER,
+          },
+        },
+        { upsert: true, new: true },
+      )
+      .exec();
+
+    if (!user) {
+      throw new BadRequestException('Failed to create or find user');
     }
 
-    const user = await this.userModel.findOne({ email: dto.email }).exec();
-    if (!user) {
-      throw new NotFoundException(`User with email ${dto.email} not found`);
+    // Log activity if user was just created (createdAt within last 2 seconds)
+    const activityCheckTime = new Date();
+    const userCreatedAt =
+      user.createdAt instanceof Date
+        ? user.createdAt
+        : new Date(user.createdAt!);
+    const timeDiff = activityCheckTime.getTime() - userCreatedAt.getTime();
+    const userId = (user._id as any).toString();
+
+    if (timeDiff < 2000) {
+      // User was just created (within last 2 seconds)
+      await this.userActivityService.logUserActivity(
+        userId,
+        UserActivityAction.ACCOUNT_CREATED,
+        {
+          performedBy: userId,
+          description: 'User account auto-created when ticket was booked',
+          metadata: {
+            phone: user.phone,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            status: UserStatus.PRE_REGISTERED,
+            role: UserRole.CUSTOMER,
+            source: 'ticket_booking',
+          },
+        },
+      );
     }
 
     // 2. Get and validate scheduling
-    const scheduling = await this.schedulingModel.findById(dto.schedulingId).exec();
+    const scheduling = await this.schedulingModel
+      .findById(dto.schedulingId)
+      .exec();
     if (!scheduling) {
       throw new NotFoundException('Scheduling not found');
     }
     if (!scheduling.price) {
-      throw new BadRequestException('Scheduling does not have price information');
+      throw new BadRequestException(
+        'Scheduling does not have price information',
+      );
     }
 
     // 3. Validate scheduling is in the future
@@ -156,25 +213,25 @@ export class TicketService {
 
     if (expiredTime <= now) {
       throw new BadRequestException(
-        'Cannot book ticket: departure time is too soon (less than 3 hours from now)'
+        'Cannot book ticket: departure time is too soon (less than 3 hours from now)',
       );
     }
 
     // 5. Check seat availability
     await this.seatService.checkSeatAvailability(
       dto.seatId,
-      scheduling.busId.toString()
+      scheduling.busId.toString(),
     );
 
     // 6. Find applicable promotion
     const promotion = await this.promotionService.findApplicablePromotion(
-      scheduling.departureDate
+      scheduling.departureDate,
     );
 
     // 7. Calculate final price
     const totalPrice = this.promotionService.calculateFinalPrice(
       scheduling.price,
-      promotion.value
+      promotion.value,
     );
 
     // 8. Set default paymentMethod if missing
@@ -218,7 +275,10 @@ export class TicketService {
     this.validateStatusTransition(ticket.status, dto.status);
 
     // Validate expiry for SUCCESS transition
-    if (dto.status === TicketStatus.SUCCESS && ticket.status === TicketStatus.PENDING) {
+    if (
+      dto.status === TicketStatus.SUCCESS &&
+      ticket.status === TicketStatus.PENDING
+    ) {
       const now = new Date();
       if (now > ticket.expiredTime) {
         throw new BadRequestException('Cannot confirm: ticket has expired');
@@ -227,8 +287,7 @@ export class TicketService {
 
     // Create snapshot when status becomes final
     const shouldCreateSnapshot =
-      dto.status === TicketStatus.SUCCESS ||
-      dto.status === TicketStatus.FAILED;
+      dto.status === TicketStatus.SUCCESS || dto.status === TicketStatus.FAILED;
 
     if (shouldCreateSnapshot && !ticket.snapshot) {
       ticket.snapshot = await this.buildSnapshot(
@@ -244,7 +303,7 @@ export class TicketService {
     if (dto.fallbackURL) {
       ticket.fallbackURL = dto.fallbackURL;
     }
-    
+
     // Update paymentMethod if provided (for CASH payment)
     if (dto.paymentMethod) {
       ticket.paymentMethod = dto.paymentMethod;
@@ -273,18 +332,20 @@ export class TicketService {
       .populate('seatId', 'seatNo')
       .populate('userId', 'firstName lastName email')
       .exec();
-      
+
     if (!oldTicket) throw new NotFoundException('Old ticket not found');
 
     // Only SUCCESS tickets can be transferred
     if (oldTicket.status !== TicketStatus.SUCCESS) {
-      throw new BadRequestException('Can only transfer confirmed (SUCCESS) tickets');
+      throw new BadRequestException(
+        'Can only transfer confirmed (SUCCESS) tickets',
+      );
     }
 
     // Check if ticket has already been transferred
     if (oldTicket.transferTicketId) {
       throw new BadRequestException(
-        'This ticket has already been transferred. Each ticket can only be transferred once.'
+        'This ticket has already been transferred. Each ticket can only be transferred once.',
       );
     }
 
@@ -298,7 +359,7 @@ export class TicketService {
 
     if (now >= threeHoursBefore) {
       throw new BadRequestException(
-        'Cannot transfer ticket: must be at least 3 hours before departure'
+        'Cannot transfer ticket: must be at least 3 hours before departure',
       );
     }
 
@@ -308,7 +369,9 @@ export class TicketService {
       .exec();
     if (!newScheduling) throw new NotFoundException('New scheduling not found');
     if (!newScheduling.price) {
-      throw new BadRequestException('New scheduling does not have price information');
+      throw new BadRequestException(
+        'New scheduling does not have price information',
+      );
     }
 
     // 5. Validate same route and price
@@ -322,18 +385,18 @@ export class TicketService {
     // 6. Check new seat availability
     await this.seatService.checkSeatAvailability(
       dto.newSeatId,
-      newScheduling.busId.toString()
+      newScheduling.busId.toString(),
     );
 
     // 7. Find applicable promotion for new scheduling
     const promotion = await this.promotionService.findApplicablePromotion(
-      newScheduling.departureDate
+      newScheduling.departureDate,
     );
 
     // 8. Calculate new price and expired time
     const totalPrice = this.promotionService.calculateFinalPrice(
       newScheduling.price,
-      promotion.value
+      promotion.value,
     );
 
     const expiredTime = new Date(newScheduling.departureDate);
@@ -394,7 +457,9 @@ export class TicketService {
 
     return {
       oldTicket: await this.findOne(oldTicketId),
-      newTicket: await this.findOne((savedNewTicket._id as Types.ObjectId).toString()),
+      newTicket: await this.findOne(
+        (savedNewTicket._id as Types.ObjectId).toString(),
+      ),
       message: 'Ticket transferred successfully',
       transferDescription,
     };
@@ -515,7 +580,7 @@ export class TicketService {
       if (phone) userQuery.phone = phone;
 
       const users = await this.userModel.find(userQuery).select('_id').exec();
-      
+
       if (users.length === 0) {
         // If no users match, return empty result
         return {
@@ -530,7 +595,7 @@ export class TicketService {
       }
 
       // Filter tickets by matching user IDs
-      filter.userId = { $in: users.map(u => u._id) };
+      filter.userId = { $in: users.map((u) => u._id) };
     }
 
     if (schedulingId) filter.schedulingId = new Types.ObjectId(schedulingId);
@@ -580,16 +645,18 @@ export class TicketService {
     const scheduling = await this.schedulingModel.findById(schedulingId).exec();
     if (!scheduling) throw new NotFoundException('Scheduling not found');
     if (!scheduling.price) {
-      throw new BadRequestException('Scheduling does not have price information');
+      throw new BadRequestException(
+        'Scheduling does not have price information',
+      );
     }
 
     const promotion = await this.promotionService.findApplicablePromotion(
-      scheduling.departureDate
+      scheduling.departureDate,
     );
 
     const discount = this.promotionService.calculateDiscount(
       scheduling.price,
-      promotion.value
+      promotion.value,
     );
     const totalPrice = scheduling.price - discount;
 
@@ -659,7 +726,10 @@ export class TicketService {
       .exec();
   }
 
-  private validateStatusTransition(currentStatus: TicketStatus, newStatus: TicketStatus) {
+  private validateStatusTransition(
+    currentStatus: TicketStatus,
+    newStatus: TicketStatus,
+  ) {
     const validTransitions: Record<TicketStatus, TicketStatus[]> = {
       [TicketStatus.PENDING]: [TicketStatus.SUCCESS, TicketStatus.FAILED],
       [TicketStatus.SUCCESS]: [TicketStatus.TRANSFER, TicketStatus.FAILED],
@@ -669,7 +739,7 @@ export class TicketService {
 
     if (!validTransitions[currentStatus].includes(newStatus)) {
       throw new BadRequestException(
-        `Cannot transition from ${currentStatus} to ${newStatus}`
+        `Cannot transition from ${currentStatus} to ${newStatus}`,
       );
     }
   }
@@ -677,7 +747,10 @@ export class TicketService {
   // ============================================
   // VNPAY INTEGRATION
   // ============================================
-  async createPaymentUrl(ticketId: string, ipAddr: string): Promise<{
+  async createPaymentUrl(
+    ticketId: string,
+    ipAddr: string,
+  ): Promise<{
     success: boolean;
     paymentUrl: string;
     transactionId: string;
@@ -737,7 +810,7 @@ export class TicketService {
     paymentInfo?: any;
   }> {
     const verifyResult = this.vnpayService.verifyReturnUrl(vnpParams);
-  
+
     if (!verifyResult.isValid) {
       throw new BadRequestException('Invalid payment signature');
     }
@@ -748,9 +821,7 @@ export class TicketService {
     const bankCode = vnpParams.vnp_BankCode;
     const amount = parseInt(vnpParams.vnp_Amount) / 100;
 
-    const ticket = await this.ticketModel
-      .findOne({ transactionId })
-      .exec();
+    const ticket = await this.ticketModel.findOne({ transactionId }).exec();
 
     if (!ticket) {
       throw new NotFoundException('Ticket not found with this transaction ID');
@@ -763,7 +834,7 @@ export class TicketService {
 
     if (responseCode === '00') {
       ticket.paidAt = new Date();
-    
+
       if (!ticket.snapshot) {
         ticket.snapshot = await this.buildSnapshot(
           ticket.seatId,
@@ -826,7 +897,9 @@ export class TicketService {
   async getPaymentStatus(ticketId: string) {
     const ticket = await this.ticketModel
       .findById(ticketId)
-      .select('status transactionId vnpayTransactionNo responseCode responseMessage bankCode paidAt totalPrice')
+      .select(
+        'status transactionId vnpayTransactionNo responseCode responseMessage bankCode paidAt totalPrice',
+      )
       .exec();
 
     if (!ticket) {
@@ -836,8 +909,12 @@ export class TicketService {
     return {
       ticketId: String(ticket._id),
       status: ticket.status,
-      paymentStatus: ticket.status === TicketStatus.SUCCESS ? 'PAID' :
-        ticket.status === TicketStatus.FAILED ? 'FAILED' : 'PENDING',
+      paymentStatus:
+        ticket.status === TicketStatus.SUCCESS
+          ? 'PAID'
+          : ticket.status === TicketStatus.FAILED
+            ? 'FAILED'
+            : 'PENDING',
       transactionId: ticket.transactionId,
       vnpayTransactionNo: ticket.vnpayTransactionNo,
       responseCode: ticket.responseCode,
@@ -848,393 +925,409 @@ export class TicketService {
     };
   }
 
-// ============================================
-// ANALYTICS METHODS - Add to TicketService class
-// ============================================
+  // ============================================
+  // ANALYTICS METHODS - Add to TicketService class
+  // ============================================
 
-/**
- * Get revenue analytics for today
- */
-async getRevenueToday() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-
-  const tickets = await this.ticketModel
-    .find({
-      status: TicketStatus.SUCCESS,
-      updatedAt: {
-        $gte: today,
-        $lt: tomorrow,
-      },
-    })
-    .select('totalPrice paidAt paymentMethod updatedAt')
-    .lean()
-    .exec();
-
-  const totalRevenue = tickets.reduce((sum, ticket) => sum + ticket.totalPrice, 0);
-  const ticketCount = tickets.length;
-
-  // Group by payment method
-  const byPaymentMethod = tickets.reduce((acc, ticket) => {
-    const method = ticket.paymentMethod || 'UNKNOWN';
-    if (!acc[method]) {
-      acc[method] = { count: 0, revenue: 0 };
-    }
-    acc[method].count += 1;
-    acc[method].revenue += ticket.totalPrice;
-    return acc;
-  }, {} as Record<string, { count: number; revenue: number }>);
-
-  return {
-    date: today.toISOString().split('T')[0],
-    totalRevenue,
-    ticketCount,
-    averageTicketPrice: ticketCount > 0 ? Math.round(totalRevenue / ticketCount) : 0,
-    byPaymentMethod,
-  };
-}
-
-/**
- * Get revenue analytics by scheduling
- */
-async getRevenueByScheduling(schedulingId: string) {
-  const tickets = await this.ticketModel
-    .find({
-      schedulingId: new Types.ObjectId(schedulingId),
-      status: TicketStatus.SUCCESS,
-    })
-    .select('totalPrice paidAt paymentMethod seatId')
-    .populate('seatId', 'seatNo')
-    .lean()
-    .exec();
-
-  const totalRevenue = tickets.reduce((sum, ticket) => sum + ticket.totalPrice, 0);
-  const ticketCount = tickets.length;
-
-  // Group by payment method
-  const byPaymentMethod = tickets.reduce((acc, ticket) => {
-    const method = ticket.paymentMethod || 'UNKNOWN';
-    if (!acc[method]) {
-      acc[method] = { count: 0, revenue: 0 };
-    }
-    acc[method].count += 1;
-    acc[method].revenue += ticket.totalPrice;
-    return acc;
-  }, {} as Record<string, { count: number; revenue: number }>);
-
-  // Get scheduling details
-  const scheduling = await this.schedulingModel
-    .findById(schedulingId)
-    .populate('routeId', 'name')
-    .populate('busId', 'licensePlate capacity')
-    .lean()
-    .exec();
-
-  if (!scheduling) {
-    throw new NotFoundException('Scheduling not found');
-  }
-
-  const route = scheduling.routeId as any;
-  const bus = scheduling.busId as any;
-
-  // Calculate occupancy rate
-  const busCapacity = bus?.capacity || 0;
-  const occupancyRate = busCapacity > 0 
-    ? Math.round((ticketCount / busCapacity) * 100) 
-    : 0;
-
-  // Ticket details list
-  const ticketDetails = tickets.map((ticket: any) => ({
-    seatNo: ticket.seatId?.seatNo,
-    price: ticket.totalPrice,
-    paymentMethod: ticket.paymentMethod,
-    paidAt: ticket.paidAt,
-  }));
-
-  return {
-    schedulingId,
-    route: {
-      name: route?.name,
-      routeId: scheduling.routeId,
-    },
-    bus: {
-      licensePlate: bus?.licensePlate,
-      capacity: busCapacity,
-      busId: scheduling.busId,
-    },
-    scheduling: {
-      departureDate: scheduling.departureDate,
-      arrivalDate: scheduling.arrivalDate,
-      etd: scheduling.etd,
-      eta: scheduling.eta,
-      status: scheduling.status,
-    },
-    totalRevenue,
-    ticketCount,
-    occupancyRate,
-    availableSeats: busCapacity - ticketCount,
-    averageTicketPrice: ticketCount > 0 ? Math.round(totalRevenue / ticketCount) : 0,
-    byPaymentMethod,
-    ticketDetails,
-  };
-}
-
-/**
- * Get dashboard summary with key metrics
- */
-async getDashboardSummary() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const thisYear = new Date(today.getFullYear(), 0, 1);
-
-  const [todayStats, monthStats, yearStats, totalStats] = await Promise.all([
-    // Today
-    this.ticketModel.aggregate([
-      {
-        $match: {
-          status: TicketStatus.SUCCESS,
-          updatedAt: { $gte: today },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          revenue: { $sum: '$totalPrice' },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
-    // This month
-    this.ticketModel.aggregate([
-      {
-        $match: {
-          status: TicketStatus.SUCCESS,
-          updatedAt: { $gte: thisMonth },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          revenue: { $sum: '$totalPrice' },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
-    // This year
-    this.ticketModel.aggregate([
-      {
-        $match: {
-          status: TicketStatus.SUCCESS,
-          updatedAt: { $gte: thisYear },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          revenue: { $sum: '$totalPrice' },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
-    // All time
-    this.ticketModel.aggregate([
-      {
-        $match: {
-          status: TicketStatus.SUCCESS,
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          revenue: { $sum: '$totalPrice' },
-          count: { $sum: 1 },
-        },
-      },
-    ]),
-  ]);
-
-  // Pending tickets
-  const pendingCount = await this.ticketModel.countDocuments({
-    status: TicketStatus.PENDING,
-  });
-
-  return {
-    today: {
-      revenue: todayStats[0]?.revenue || 0,
-      ticketCount: todayStats[0]?.count || 0,
-    },
-    thisMonth: {
-      revenue: monthStats[0]?.revenue || 0,
-      ticketCount: monthStats[0]?.count || 0,
-    },
-    thisYear: {
-      revenue: yearStats[0]?.revenue || 0,
-      ticketCount: yearStats[0]?.count || 0,
-    },
-    allTime: {
-      revenue: totalStats[0]?.revenue || 0,
-      ticketCount: totalStats[0]?.count || 0,
-    },
-    pending: {
-      ticketCount: pendingCount,
-    },
-  };
-}
-
-/**
- * Get detailed ticket list with analytics filters
- */
-async getTicketsWithAnalytics(filters: {
-  period?: 'today' | 'thisMonth' | 'thisYear' | 'allTime' | 'custom';
-  startDate?: Date;
-  endDate?: Date;
-  status?: TicketStatus;
-  paymentMethod?: string;
-  page?: number;
-  limit?: number;
-}) {
-  const {
-    period = 'allTime',
-    startDate,
-    endDate,
-    status,
-    paymentMethod,
-    page = 1,
-    limit = 10,
-  } = filters;
-
-  // Determine date range based on period
-  let dateFilter: any = {};
-  const now = new Date();
-
-  if (period === 'today') {
+  /**
+   * Get revenue analytics for today
+   */
+  async getRevenueToday() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    dateFilter = { updatedAt: { $gte: today, $lt: tomorrow } };
-  } else if (period === 'thisMonth') {
-    const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    dateFilter = { updatedAt: { $gte: thisMonth } };
-  } else if (period === 'thisYear') {
-    const thisYear = new Date(now.getFullYear(), 0, 1);
-    dateFilter = { updatedAt: { $gte: thisYear } };
-  } else if (period === 'custom' && startDate && endDate) {
-    dateFilter = { updatedAt: { $gte: startDate, $lte: endDate } };
-  }
 
-  // Build filter object
-  const filter: any = {
-    status: status || TicketStatus.SUCCESS,
-    ...dateFilter,
-  };
-
-  if (paymentMethod) {
-    filter.paymentMethod = paymentMethod;
-  }
-
-  const skip = (page - 1) * limit;
-
-  // Get tickets with populated data
-  const [tickets, total] = await Promise.all([
-    this.ticketModel
-      .find(filter)
-      .sort({ updatedAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate('userId', 'firstName lastName email phone')
-      .populate('seatId', 'seatNo')
-      .populate('schedulingId', 'departureDate etd')
-      .populate('promotionId', 'name value')
+    const tickets = await this.ticketModel
+      .find({
+        status: TicketStatus.SUCCESS,
+        updatedAt: {
+          $gte: today,
+          $lt: tomorrow,
+        },
+      })
+      .select('totalPrice paidAt paymentMethod updatedAt')
       .lean()
-      .exec(),
-    this.ticketModel.countDocuments(filter).exec(),
-  ]);
+      .exec();
 
-  // Calculate summary for current filter
-  const summary = await this.ticketModel.aggregate([
-    { $match: filter },
-    {
-      $group: {
-        _id: null,
-        totalRevenue: { $sum: '$totalPrice' },
-        count: { $sum: 1 },
+    const totalRevenue = tickets.reduce(
+      (sum, ticket) => sum + ticket.totalPrice,
+      0,
+    );
+    const ticketCount = tickets.length;
+
+    // Group by payment method
+    const byPaymentMethod = tickets.reduce(
+      (acc, ticket) => {
+        const method = ticket.paymentMethod || 'UNKNOWN';
+        if (!acc[method]) {
+          acc[method] = { count: 0, revenue: 0 };
+        }
+        acc[method].count += 1;
+        acc[method].revenue += ticket.totalPrice;
+        return acc;
       },
-    },
-  ]);
+      {} as Record<string, { count: number; revenue: number }>,
+    );
 
-  // Group by payment method
-  const byPaymentMethod = await this.ticketModel.aggregate([
-    { $match: filter },
-    {
-      $group: {
-        _id: '$paymentMethod',
-        count: { $sum: 1 },
-        revenue: { $sum: '$totalPrice' },
-      },
-    },
-  ]);
-
-  const totalPages = Math.ceil(total / limit);
-
-  return {
-    summary: {
-      totalRevenue: summary[0]?.totalRevenue || 0,
-      ticketCount: summary[0]?.count || 0,
+    return {
+      date: today.toISOString().split('T')[0],
+      totalRevenue,
+      ticketCount,
       averageTicketPrice:
-        summary[0]?.count > 0
-          ? Math.round(summary[0].totalRevenue / summary[0].count)
-          : 0,
-    },
-    byPaymentMethod: byPaymentMethod.reduce((acc, item) => {
-      acc[item._id || 'UNKNOWN'] = {
-        count: item.count,
-        revenue: item.revenue,
-      };
-      return acc;
-    }, {} as Record<string, { count: number; revenue: number }>),
-    tickets: tickets.map((ticket: any) => ({
-      _id: ticket._id,
-      totalPrice: ticket.totalPrice,
+        ticketCount > 0 ? Math.round(totalRevenue / ticketCount) : 0,
+      byPaymentMethod,
+    };
+  }
+
+  /**
+   * Get revenue analytics by scheduling
+   */
+  async getRevenueByScheduling(schedulingId: string) {
+    const tickets = await this.ticketModel
+      .find({
+        schedulingId: new Types.ObjectId(schedulingId),
+        status: TicketStatus.SUCCESS,
+      })
+      .select('totalPrice paidAt paymentMethod seatId')
+      .populate('seatId', 'seatNo')
+      .lean()
+      .exec();
+
+    const totalRevenue = tickets.reduce(
+      (sum, ticket) => sum + ticket.totalPrice,
+      0,
+    );
+    const ticketCount = tickets.length;
+
+    // Group by payment method
+    const byPaymentMethod = tickets.reduce(
+      (acc, ticket) => {
+        const method = ticket.paymentMethod || 'UNKNOWN';
+        if (!acc[method]) {
+          acc[method] = { count: 0, revenue: 0 };
+        }
+        acc[method].count += 1;
+        acc[method].revenue += ticket.totalPrice;
+        return acc;
+      },
+      {} as Record<string, { count: number; revenue: number }>,
+    );
+
+    // Get scheduling details
+    const scheduling = await this.schedulingModel
+      .findById(schedulingId)
+      .populate('routeId', 'name')
+      .populate('busId', 'licensePlate capacity')
+      .lean()
+      .exec();
+
+    if (!scheduling) {
+      throw new NotFoundException('Scheduling not found');
+    }
+
+    const route = scheduling.routeId as any;
+    const bus = scheduling.busId as any;
+
+    // Calculate occupancy rate
+    const busCapacity = bus?.capacity || 0;
+    const occupancyRate =
+      busCapacity > 0 ? Math.round((ticketCount / busCapacity) * 100) : 0;
+
+    // Ticket details list
+    const ticketDetails = tickets.map((ticket: any) => ({
+      seatNo: ticket.seatId?.seatNo,
+      price: ticket.totalPrice,
       paymentMethod: ticket.paymentMethod,
-      status: ticket.status,
-      createdAt: ticket.createdAt,
-      updatedAt: ticket.updatedAt,
       paidAt: ticket.paidAt,
-      user: ticket.userId
-        ? {
-            name: `${ticket.userId.firstName} ${ticket.userId.lastName}`,
-            email: ticket.userId.email,
-            phone: ticket.userId.phone,
-          }
-        : null,
-      seat: ticket.seatId?.seatNo,
-      scheduling: ticket.schedulingId
-        ? {
-            departureDate: ticket.schedulingId.departureDate,
-            etd: ticket.schedulingId.etd,
-          }
-        : null,
-      promotion: ticket.promotionId
-        ? {
-            name: ticket.promotionId.name,
-            value: ticket.promotionId.value,
-          }
-        : null,
-    })),
-    pagination: {
-      total,
-      page,
-      limit,
-      totalPages,
-      hasNextPage: page < totalPages,
-      hasPrevPage: page > 1,
-    },
-  };
-}
+    }));
+
+    return {
+      schedulingId,
+      route: {
+        name: route?.name,
+        routeId: scheduling.routeId,
+      },
+      bus: {
+        licensePlate: bus?.licensePlate,
+        capacity: busCapacity,
+        busId: scheduling.busId,
+      },
+      scheduling: {
+        departureDate: scheduling.departureDate,
+        arrivalDate: scheduling.arrivalDate,
+        etd: scheduling.etd,
+        eta: scheduling.eta,
+        status: scheduling.status,
+      },
+      totalRevenue,
+      ticketCount,
+      occupancyRate,
+      availableSeats: busCapacity - ticketCount,
+      averageTicketPrice:
+        ticketCount > 0 ? Math.round(totalRevenue / ticketCount) : 0,
+      byPaymentMethod,
+      ticketDetails,
+    };
+  }
+
+  /**
+   * Get dashboard summary with key metrics
+   */
+  async getDashboardSummary() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const thisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const thisYear = new Date(today.getFullYear(), 0, 1);
+
+    const [todayStats, monthStats, yearStats, totalStats] = await Promise.all([
+      // Today
+      this.ticketModel.aggregate([
+        {
+          $match: {
+            status: TicketStatus.SUCCESS,
+            updatedAt: { $gte: today },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            revenue: { $sum: '$totalPrice' },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+      // This month
+      this.ticketModel.aggregate([
+        {
+          $match: {
+            status: TicketStatus.SUCCESS,
+            updatedAt: { $gte: thisMonth },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            revenue: { $sum: '$totalPrice' },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+      // This year
+      this.ticketModel.aggregate([
+        {
+          $match: {
+            status: TicketStatus.SUCCESS,
+            updatedAt: { $gte: thisYear },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            revenue: { $sum: '$totalPrice' },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+      // All time
+      this.ticketModel.aggregate([
+        {
+          $match: {
+            status: TicketStatus.SUCCESS,
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            revenue: { $sum: '$totalPrice' },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+    // Pending tickets
+    const pendingCount = await this.ticketModel.countDocuments({
+      status: TicketStatus.PENDING,
+    });
+
+    return {
+      today: {
+        revenue: todayStats[0]?.revenue || 0,
+        ticketCount: todayStats[0]?.count || 0,
+      },
+      thisMonth: {
+        revenue: monthStats[0]?.revenue || 0,
+        ticketCount: monthStats[0]?.count || 0,
+      },
+      thisYear: {
+        revenue: yearStats[0]?.revenue || 0,
+        ticketCount: yearStats[0]?.count || 0,
+      },
+      allTime: {
+        revenue: totalStats[0]?.revenue || 0,
+        ticketCount: totalStats[0]?.count || 0,
+      },
+      pending: {
+        ticketCount: pendingCount,
+      },
+    };
+  }
+
+  /**
+   * Get detailed ticket list with analytics filters
+   */
+  async getTicketsWithAnalytics(filters: {
+    period?: 'today' | 'thisMonth' | 'thisYear' | 'allTime' | 'custom';
+    startDate?: Date;
+    endDate?: Date;
+    status?: TicketStatus;
+    paymentMethod?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const {
+      period = 'allTime',
+      startDate,
+      endDate,
+      status,
+      paymentMethod,
+      page = 1,
+      limit = 10,
+    } = filters;
+
+    // Determine date range based on period
+    let dateFilter: any = {};
+    const now = new Date();
+
+    if (period === 'today') {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      dateFilter = { updatedAt: { $gte: today, $lt: tomorrow } };
+    } else if (period === 'thisMonth') {
+      const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      dateFilter = { updatedAt: { $gte: thisMonth } };
+    } else if (period === 'thisYear') {
+      const thisYear = new Date(now.getFullYear(), 0, 1);
+      dateFilter = { updatedAt: { $gte: thisYear } };
+    } else if (period === 'custom' && startDate && endDate) {
+      dateFilter = { updatedAt: { $gte: startDate, $lte: endDate } };
+    }
+
+    // Build filter object
+    const filter: any = {
+      status: status || TicketStatus.SUCCESS,
+      ...dateFilter,
+    };
+
+    if (paymentMethod) {
+      filter.paymentMethod = paymentMethod;
+    }
+
+    const skip = (page - 1) * limit;
+
+    // Get tickets with populated data
+    const [tickets, total] = await Promise.all([
+      this.ticketModel
+        .find(filter)
+        .sort({ updatedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('userId', 'firstName lastName email phone')
+        .populate('seatId', 'seatNo')
+        .populate('schedulingId', 'departureDate etd')
+        .populate('promotionId', 'name value')
+        .lean()
+        .exec(),
+      this.ticketModel.countDocuments(filter).exec(),
+    ]);
+
+    // Calculate summary for current filter
+    const summary = await this.ticketModel.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$totalPrice' },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    // Group by payment method
+    const byPaymentMethod = await this.ticketModel.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: '$paymentMethod',
+          count: { $sum: 1 },
+          revenue: { $sum: '$totalPrice' },
+        },
+      },
+    ]);
+
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      summary: {
+        totalRevenue: summary[0]?.totalRevenue || 0,
+        ticketCount: summary[0]?.count || 0,
+        averageTicketPrice:
+          summary[0]?.count > 0
+            ? Math.round(summary[0].totalRevenue / summary[0].count)
+            : 0,
+      },
+      byPaymentMethod: byPaymentMethod.reduce(
+        (acc, item) => {
+          acc[item._id || 'UNKNOWN'] = {
+            count: item.count,
+            revenue: item.revenue,
+          };
+          return acc;
+        },
+        {} as Record<string, { count: number; revenue: number }>,
+      ),
+      tickets: tickets.map((ticket: any) => ({
+        _id: ticket._id,
+        totalPrice: ticket.totalPrice,
+        paymentMethod: ticket.paymentMethod,
+        status: ticket.status,
+        createdAt: ticket.createdAt,
+        updatedAt: ticket.updatedAt,
+        paidAt: ticket.paidAt,
+        user: ticket.userId
+          ? {
+              name: `${ticket.userId.firstName} ${ticket.userId.lastName}`,
+              email: ticket.userId.email,
+              phone: ticket.userId.phone,
+            }
+          : null,
+        seat: ticket.seatId?.seatNo,
+        scheduling: ticket.schedulingId
+          ? {
+              departureDate: ticket.schedulingId.departureDate,
+              etd: ticket.schedulingId.etd,
+            }
+          : null,
+        promotion: ticket.promotionId
+          ? {
+              name: ticket.promotionId.name,
+              value: ticket.promotionId.value,
+            }
+          : null,
+      })),
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    };
+  }
 }
