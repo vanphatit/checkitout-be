@@ -1,6 +1,22 @@
-import { IsString, IsOptional, IsEnum, IsArray, IsInt } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsArray,
+  IsInt,
+  ValidateNested,
+} from 'class-validator';
 import { BusStatus } from '../enums/bus-status.enum';
 import { BusType } from '../enums/bus-type.enum';
+import { Type } from 'class-transformer';
+
+export class BusImageDto {
+  @IsString()
+  url: string;
+
+  @IsString()
+  publicId: string;
+}
 
 export class CreateBusDto {
   @IsString()
@@ -12,9 +28,6 @@ export class CreateBusDto {
   @IsEnum(BusType)
   type: BusType;
 
-  @IsInt()
-  vacancy: number;
-
   @IsString()
   driverName: string;
 
@@ -23,6 +36,8 @@ export class CreateBusDto {
   status?: BusStatus;
 
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BusImageDto)
   @IsOptional()
-  images?: string[];
+  images?: BusImageDto[];
 }

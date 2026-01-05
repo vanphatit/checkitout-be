@@ -10,50 +10,83 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { BusService } from './bus.service';
-import { CreateBusDto } from './dto/create-bus.dto';
+import { BusImageDto, CreateBusDto } from './dto/create-bus.dto';
 import { UpdateBusDto } from './dto/update-bus.dto';
-import { PaginationDto } from '../common/dto/pagination.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { UserRole } from '../users/enums/user-role.enum';
 import { Roles } from '../common/decorators/roles.decorator';
 import { BadRequestException } from '@nestjs/common/exceptions';
-import { UseInterceptors, UploadedFile } from '@nestjs/common/decorators';
+import {
+  UseInterceptors,
+  UploadedFile,
+  UploadedFiles,
+} from '@nestjs/common/decorators';
 import { ExcelFileInterceptor } from './interceptor/excel-file.interceptor';
 import { UpdateBusStatusDto } from './dto/update-bus-status.dto';
 import * as fs from 'fs';
+import { PaginationDto } from './dto/bus-pagination.dto';
+import { CloudinaryService } from 'src/common/cloudinary/cloudinary.service';
 
 @Controller('buses')
 export class BusController {
-  constructor(private readonly busService: BusService) {}
+  constructor(
+    private readonly busService: BusService,
+    private readonly cloudinaryService: CloudinaryService,
+  ) { }
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN)
-  create(@Body() createBusDto: CreateBusDto) {
-    return this.busService.create(createBusDto);
-  }
+  @UseInterceptors(FilesInterceptor('images', 5))
+  async createBus(
+    @Body() createBusDto: CreateBusDto,
+    @UploadedFiles() images: Express.Multer.File[],
+  ) {
+    let uploadedImages: BusImageDto[] = [];
 
-  @Post('import')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  @UseInterceptors(ExcelFileInterceptor())
-  async importExcel(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('File Excel is required');
+    if (images?.length) {
+      uploadedImages = await this.cloudinaryService.uploadFiles(
+        images,
+        'buses',
+      );
     }
 
-    try {
-      const result = await this.busService.importFromExcel(file.path);
-      return result;
-    } finally {
-      fs.unlink(file.path, () => {});
-    }
+    // Tạo bus + sinh ghế + gán images
+    return this.busService.createWithSeats({
+      ...createBusDto,
+      images: uploadedImages,
+    });
   }
+
+  // @Post('import')
+  // @UseGuards(JwtAuthGuard, RolesGuard)
+  // @Roles(UserRole.ADMIN)
+  // @UseInterceptors(ExcelFileInterceptor())
+  // async importExcel(@UploadedFile() file: Express.Multer.File) {
+  //   if (!file) {
+  //     throw new BadRequestException('File Excel is required');
+  //   }
+
+  //   try {
+  //     const result = await this.busService.importFromExcel(file.path);
+  //     return result;
+  //   } finally {
+  //     fs.unlink(file.path, () => { });
+  //   }
+  // }
 
   @Get()
   findAll(@Query() paginationDto: PaginationDto) {
     return this.busService.findAll(paginationDto);
+  }
+
+  @Get('statistics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  getStatistics() {
+    return this.busService.getBusStatistics();
   }
 
   @Get(':id')
@@ -62,11 +95,26 @@ export class BusController {
     return this.busService.findOne(id);
   }
 
+  // @Patch(':id')
+  // @UseGuards(JwtAuthGuard, RolesGuard)
+  // @Roles(UserRole.ADMIN)
+  // update(@Param('id') id: string, @Body() updateBusDto: UpdateBusDto) {
+  //   return this.busService.update(id, updateBusDto);
+  // }
+
   @Patch(':id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  update(@Param('id') id: string, @Body() updateBusDto: UpdateBusDto) {
-    return this.busService.update(id, updateBusDto);
+  @UseInterceptors(FilesInterceptor('images', 5))
+  async updateBus(
+    @Param('id') id: string,
+    @Body() updateBusDto: UpdateBusDto,
+    @UploadedFiles() images: Express.Multer.File[],
+  ) {
+    try {
+      return await this.busService.update(id, updateBusDto, images);
+    } catch (error) {
+      console.error('Update Bus error:', error);
+      throw new BadRequestException(error.message || 'Update failed');
+    }
   }
 
   @Patch(':busId/status')
@@ -77,6 +125,21 @@ export class BusController {
     @Body() updateBusStatusDto: UpdateBusStatusDto,
   ) {
     return this.busService.updateStatus(busId, updateBusStatusDto.status);
+  }
+
+  @Delete(':busId/images')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async deleteBusImage(
+    @Param('busId') busId: string,
+    @Query('publicId') publicId: string,
+  ) {
+    try {
+      return await this.busService.removeImage(busId, publicId);
+    } catch (error) {
+      console.error('Delete bus image error:', error);
+      throw new BadRequestException(error.message || 'Xóa ảnh thất bại');
+    }
   }
 
   @Delete(':id')
