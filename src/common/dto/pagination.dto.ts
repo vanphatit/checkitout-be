@@ -64,7 +64,6 @@ export class PaginationDto {
   })
   @IsOptional()
   @Transform(({ value }) => {
-    console.log('Transform includeDeleted:', value, typeof value);
     if (value === undefined || value === null) return false;
     if (typeof value === 'boolean') return value;
     if (typeof value === 'string') return value.toLowerCase() === 'true';
