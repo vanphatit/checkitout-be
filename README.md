@@ -75,11 +75,19 @@ A robust NestJS backend application with authentication, email verification, and
 4. **Start MongoDB and Redis with Docker**
 
    ```bash
-   # MongoDB
-   docker run -d --name mongodb -p 27017:27017 mongo:latest
+   docker-compose up --build -d
+   ```
+5. **Seed all data**
 
-   # Redis
-   docker run -d --name redis -p 6379:6379 redis:latest
+   ```bash
+   POST http://localhost:9091/api/v1/auth/login
+   {
+     "email": "admin1@checkitout.com",
+     "password": "Admin123!"
+   }
+
+   POST http://localhost:9091/api/v1/seeder/seed-all
+   Authorization: Bearer <access_token> # take from the response of login
    ```
 
 ## 🚦 Running the Application
