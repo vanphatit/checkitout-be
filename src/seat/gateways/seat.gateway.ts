@@ -32,20 +32,21 @@ export class SeatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     async handleDisconnect(client: Socket) {
         this.logger.log(`Client disconnected: ${client.id}`);
-        // Get all seats locked by this client before releasing
-        const releasedSeats = await this.seatLockService.getClientSeats(client.id);
+        // Get all seats with schedulingId locked by this client before releasing
+        const clientLocks = await this.seatLockService.getClientLocksWithScheduling(client.id);
 
         // Release all seats locked by this client
         await this.seatLockService.releaseAllSeatsForClient(client.id);
 
-        // Notify rooms about released seats
-        for (const seatId of releasedSeats) {
-            // Get scheduling ID from client's rooms
-            const rooms = Array.from(client.rooms).filter(r => r.startsWith('scheduling:'));
-            rooms.forEach(room => {
-                const schedulingId = room.replace('scheduling:', '');
-                this.server.to(room).emit('seat:unlocked', { schedulingId, seatId, clientId: client.id });
+        // Notify rooms about released seats using schedulingId from lock data
+        for (const lock of clientLocks) {
+            const room = `scheduling:${lock.schedulingId}`;
+            this.server.to(room).emit('seat:unlocked', {
+                schedulingId: lock.schedulingId,
+                seatId: lock.seatId,
+                clientId: client.id
             });
+            this.logger.log(`Emitted seat:unlocked for ${lock.seatId} to room ${room} after client ${client.id} disconnected`);
         }
     }
 
