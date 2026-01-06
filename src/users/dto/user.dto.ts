@@ -35,11 +35,12 @@ export class CreateUserDto {
   @MaxLength(50)
   firstName: string;
 
-  @ApiProperty({ example: 'Doe' })
+  @ApiPropertyOptional({ example: 'Doe' })
+  @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(50)
-  lastName: string;
+  lastName?: string;
 
   @ApiProperty({
     example: '0912345678',
@@ -118,8 +119,8 @@ export class UserResponseDto {
   @ApiProperty()
   firstName: string;
 
-  @ApiProperty()
-  lastName: string;
+  @ApiPropertyOptional()
+  lastName?: string;
 
   @ApiProperty({ description: 'Phone number (required)' })
   phone: string;
@@ -142,9 +143,36 @@ export class UserResponseDto {
   @ApiPropertyOptional({ description: 'User avatar URL' })
   avatarUrl?: string;
 
+  @ApiPropertyOptional({
+    description: 'Authentication provider',
+    enum: ['local', 'google', 'facebook', 'github'],
+  })
+  authProvider?: string;
+
+  @ApiPropertyOptional({
+    description: 'Is OAuth user (requires phone verification)',
+  })
+  isOAuthUser?: boolean;
+
+  @ApiPropertyOptional({ description: 'Phone number verified status' })
+  isPhoneVerified?: boolean;
+
   @ApiProperty()
   createdAt: Date;
 
   @ApiProperty()
   updatedAt: Date;
+}
+
+export class UpdatePhoneDto {
+  @ApiProperty({
+    example: '0912345678',
+    description: 'Phone number for OAuth users',
+  })
+  @IsString()
+  @Matches(/^0[3|5|7|8|9][0-9]{8}$/, {
+    message:
+      'Phone number must be in Vietnamese format: 0xxxxxxxxx (10 digits)',
+  })
+  phone: string;
 }

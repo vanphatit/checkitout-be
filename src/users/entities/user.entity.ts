@@ -16,8 +16,8 @@ export class User {
   @Prop({ required: true })
   firstName: string;
 
-  @Prop({ required: true })
-  lastName: string;
+  @Prop({ required: false })
+  lastName?: string;
 
   @Prop({ required: true, unique: true })
   phone: string;
@@ -48,8 +48,28 @@ export class User {
   @Prop({ default: null })
   avatarUrl?: string;
 
+  @Prop({
+    type: String,
+    enum: ['local', 'google', 'facebook', 'github'],
+    default: 'local',
+  })
+  authProvider?: string;
+
+  @Prop({ type: String, unique: true, sparse: true })
+  googleId?: string;
+
+  @Prop({ type: Boolean, default: false })
+  isOAuthUser: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  isPhoneVerified: boolean;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+
+// Create indexes for OAuth fields
+UserSchema.index({ googleId: 1 }, { sparse: true, unique: true });
+UserSchema.index({ authProvider: 1 });
