@@ -8,10 +8,11 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaymentMethod } from '../enums/payment-method.enum';
-import {
-  PHONE_REGEX,
-  PHONE_VALIDATION_MESSAGE,
-} from '../../auth/constants/validation.constants';
+
+// Flexible phone regex for international and Vietnamese formats
+// Supports: +1234567890, 0901234567, etc.
+const FLEXIBLE_PHONE_REGEX = /^[\+]?[0-9]{10,15}$/;
+const FLEXIBLE_PHONE_MESSAGE = 'Phone number must be 10-15 digits, optionally starting with +';
 
 export class CreateTicketDto {
   @ApiPropertyOptional({
@@ -20,7 +21,7 @@ export class CreateTicketDto {
   })
   @IsOptional()
   @IsString()
-  @Matches(PHONE_REGEX, { message: PHONE_VALIDATION_MESSAGE })
+  @Matches(FLEXIBLE_PHONE_REGEX, { message: FLEXIBLE_PHONE_MESSAGE })
   phone?: string;
 
   @ApiPropertyOptional({
@@ -54,14 +55,15 @@ export class CreateTicketDto {
   @IsMongoId()
   schedulingId: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     enum: PaymentMethod,
     description: 'Payment method',
     example: PaymentMethod.BANKING,
     default: PaymentMethod.BANKING,
   })
+  @IsOptional()
   @IsEnum(PaymentMethod)
-  paymentMethod: PaymentMethod = PaymentMethod.BANKING;
+  paymentMethod?: PaymentMethod;
 
   @ApiPropertyOptional({
     description: 'Fallback URL from payment gateway (for Banking method)',

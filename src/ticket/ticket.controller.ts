@@ -325,6 +325,36 @@ export class TicketController {
     res.send(qrBuffer);
   }
 
+  @Get(':id/download-pdf')
+  @ApiOperation({
+    summary: 'Download ticket as PDF',
+    description:
+      'Download ticket information as PDF file including passenger info, route, seat, price, and QR code.',
+  })
+  @ApiParam({ name: 'id', description: 'Ticket ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'PDF file',
+    content: {
+      'application/pdf': {
+        schema: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 404, description: 'Ticket not found' })
+  async downloadTicketPDF(@Param('id') id: string, @Res() res: Response) {
+    const pdfBuffer = await this.ticketService.generateTicketPDF(id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="ticket-${id}.pdf"`,
+      'Content-Length': pdfBuffer.length,
+    });
+    res.send(pdfBuffer);
+  }
+
   @Patch(':id/status')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SELLER)
