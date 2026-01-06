@@ -11,7 +11,10 @@ import { Scheduling } from '../../scheduling/entities/scheduling.entity';
 import { Bus } from '../../bus/entities/bus.entity';
 import { Promotion } from '../../promotion/entities/promotion.entity';
 import { Seat } from '../../seat/entities/seat.entity';
+import { Ticket } from '../../ticket/entities/ticket.entity';
 import { SchedulingSearchService } from '../../scheduling/services/scheduling-search.service';
+import { SeederDashboardService } from './seeder-dashboard.service';
+import { SeederSchedulingDashboardService } from './seeder-scheduling-dashboard.service';
 
 @Injectable()
 export class SeederService {
@@ -24,7 +27,10 @@ export class SeederService {
         @InjectModel(Bus.name) private busModel: Model<Bus>,
         @InjectModel(Promotion.name) private promotionModel: Model<Promotion>,
         @InjectModel(Seat.name) private seatModel: Model<Seat>,
+        @InjectModel(Ticket.name) private ticketModel: Model<Ticket>,
         private schedulingSearchService: SchedulingSearchService,
+        private seederDashboardService: SeederDashboardService,
+        private seederSchedulingDashboardService: SeederSchedulingDashboardService,
     ) { }
 
     async seedAll(): Promise<void> {
@@ -45,8 +51,18 @@ export class SeederService {
             const schedulings = await this.seedSchedulings(routes, buses);
             this.logger.log(`✅ Đã tạo ${schedulings.length} lịch trình`);
 
-            const promotions = await this.seedPromotions(schedulings);
+            // Create additional schedulings for today's dashboard
+            const todaySchedulings = await this.seederSchedulingDashboardService.seedTodaySchedulings(routes, buses);
+
+            // Merge all schedulings
+            const allSchedulings = [...schedulings, ...todaySchedulings];
+
+            const promotions = await this.seedPromotions(allSchedulings);
             this.logger.log(`✅ Đã tạo ${promotions.length} promotion(s)`);
+
+            // Seed dashboard tickets with all schedulings
+            const tickets = await this.seederDashboardService.seedTicketsForDashboard(allSchedulings);
+            this.logger.log(`✅ Đã tạo ${tickets.length} tickets cho dashboard`);
 
             // Reindex Elasticsearch
             this.logger.log('🔄 Đồng bộ dữ liệu với Elasticsearch...');
@@ -71,6 +87,7 @@ export class SeederService {
             this.busModel.deleteMany({}),
             this.promotionModel.deleteMany({}),
             this.seatModel.deleteMany({}),
+            this.ticketModel.deleteMany({}),
         ]);
 
         // Clear Elasticsearch index
@@ -1057,15 +1074,21 @@ export class SeederService {
                 const durationInMinutes =
                     route.estimatedDuration || Math.floor((route.distance || 100) * 1.2);
 
-                const arrivalMinutes = hours * 60 + minutes + durationInMinutes;
-                const arrivalHours = Math.floor(arrivalMinutes / 60) % 24;
-                const arrivalMins = arrivalMinutes % 60;
-                const arrivalTime = `${arrivalHours.toString().padStart(2, '0')}:${arrivalMins.toString().padStart(2, '0')}`;
+                const departureDateTime = new Date(currentDate);
+                departureDateTime.setHours(hours, minutes, 0, 0);
 
-                const arrivalDate = new Date(currentDate);
-                if (arrivalMinutes >= 24 * 60) {
-                    arrivalDate.setDate(arrivalDate.getDate() + 1);
-                }
+                const arrivalDateTime = new Date(departureDateTime);
+                arrivalDateTime.setMinutes(
+                    arrivalDateTime.getMinutes() + durationInMinutes
+                );
+
+                const arrivalTime = `${arrivalDateTime
+                    .getHours()
+                    .toString()
+                    .padStart(2, '0')}:${arrivalDateTime
+                        .getMinutes()
+                        .toString()
+                        .padStart(2, '0')}`;
 
                 const totalSeats = bus.vacancy || bus.seats?.length || 0;
                 const bookedSeats = faker.number.int({
@@ -1073,14 +1096,25 @@ export class SeederService {
                     max: Math.floor(totalSeats * 0.8),
                 });
 
+                const now = new Date();
+                let status: 'scheduled' | 'in-progress' | 'completed';
+
+                if (departureDateTime > now) {
+                    status = 'scheduled';
+                } else if (arrivalDateTime < now) {
+                    status = 'completed';
+                } else {
+                    status = 'in-progress';
+                }
+
                 const scheduling = new this.schedulingModel({
                     routeId: route._id.toString(),
                     busId: bus._id.toString(),
                     busIds: [bus._id.toString()],
                     etd: departureTime,
                     eta: arrivalTime,
-                    departureDate: currentDate,
-                    arrivalDate: arrivalDate,
+                    departureDate: departureDateTime,
+                    arrivalDate: arrivalDateTime,
                     price:
                         (route.basePrice || 100000) +
                         faker.number.int({ min: -20000, max: 50000 }),
@@ -1089,12 +1123,7 @@ export class SeederService {
                         phone: this.generateVietnamesePhone(),
                         licenseNumber: faker.string.alphanumeric(10).toUpperCase(),
                     },
-                    status: faker.helpers.arrayElement([
-                        'scheduled',
-                        'in-progress',
-                        'completed',
-                        'cancelled',
-                    ]),
+                    status: status,
                     availableSeats: Math.max(totalSeats - bookedSeats, 0),
                     bookedSeats,
                     estimatedDuration: durationInMinutes,

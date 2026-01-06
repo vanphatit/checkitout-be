@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { SeederService } from './seeder.service';
+import { SeederDashboardService } from './seeder-dashboard.service';
+import { SeederSchedulingDashboardService } from './seeder-scheduling-dashboard.service';
 import { SeederController } from './seeder.controller';
 import { Station, StationSchema } from '../../station/entities/station.entity';
 import { Route, RouteSchema } from '../../route/entities/route.entity';
@@ -14,6 +16,8 @@ import {
   PromotionSchema,
 } from 'src/promotion/entities/promotion.entity';
 import { Seat, SeatSchema } from '../../seat/entities/seat.entity';
+import { Ticket, TicketSchema } from '../../ticket/entities/ticket.entity';
+import { User, UserSchema } from '../../users/entities/user.entity';
 import { SchedulingModule } from '../../scheduling/scheduling.module';
 
 @Module({
@@ -25,11 +29,13 @@ import { SchedulingModule } from '../../scheduling/scheduling.module';
       { name: Bus.name, schema: BusSchema },
       { name: Promotion.name, schema: PromotionSchema },
       { name: Seat.name, schema: SeatSchema },
+      { name: Ticket.name, schema: TicketSchema },
+      { name: User.name, schema: UserSchema },
     ]),
     SchedulingModule,
   ],
-  providers: [SeederService],
+  providers: [SeederService, SeederDashboardService, SeederSchedulingDashboardService],
   controllers: [SeederController],
   exports: [SeederService],
 })
-export class SeederModule {}
+export class SeederModule { }
