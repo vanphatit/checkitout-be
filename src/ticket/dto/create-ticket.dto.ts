@@ -83,4 +83,13 @@ export class CreateTicketDto {
   @IsOptional()
   @IsString()
   promotionCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Role of the user creating the ticket (set by controller, not from request body)',
+    example: 'CUSTOMER',
+  })
+  @IsOptional()
+  @IsString()
+  createdByRole?: string;
 }

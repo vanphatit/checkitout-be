@@ -58,7 +58,7 @@ export class TicketService {
     private readonly promotionService: PromotionService,
     private readonly vnpayService: VNPayService,
     private readonly userActivityService: UserActivityService,
-  ) {}
+  ) { }
 
   // ============================================
   // BUILD SNAPSHOT - Core Logic
@@ -218,7 +218,10 @@ export class TicketService {
 
     // 3. Validate scheduling is in the future
     const now = new Date();
-    if (scheduling.departureDate <= now) {
+    const departureTime = new Date(scheduling.departureDate).getTime();
+    const currentTime = now.getTime();
+
+    if (departureTime <= currentTime) {
       throw new BadRequestException('Cannot book ticket for past scheduling');
     }
 
@@ -226,7 +229,10 @@ export class TicketService {
     const expiredTime = new Date(scheduling.departureDate);
     expiredTime.setHours(expiredTime.getHours() - 3);
 
-    if (expiredTime <= now) {
+    // Only enforce 3-hour rule for CUSTOMER role
+    // ADMIN/SELLER can create tickets within 3 hours for walk-in customers
+    const isCustomer = dto.createdByRole === UserRole.CUSTOMER;
+    if (isCustomer && expiredTime <= now) {
       throw new BadRequestException(
         'Cannot book ticket: departure time is too soon (less than 3 hours from now)',
       );
@@ -336,6 +342,12 @@ export class TicketService {
     // Update seat status
     if (dto.status === TicketStatus.SUCCESS) {
       await this.seatService.confirmSeat(ticket.seatId.toString());
+
+      // Increment bookedSeats in scheduling
+      await this.schedulingModel.findByIdAndUpdate(
+        ticket.schedulingId,
+        { $inc: { bookedSeats: 1, availableSeats: -1 } }
+      );
     } else if (dto.status === TicketStatus.FAILED) {
       await this.seatService.releaseSeat(ticket.seatId.toString());
     }
@@ -397,11 +409,11 @@ export class TicketService {
     }
 
     // 5. Validate same route and price
-    if (oldScheduling.routeId.toString() !== newScheduling.routeId.toString()) {
-      throw new BadRequestException('Transfer must be on the same route');
-    }
-    if (oldScheduling.price !== newScheduling.price) {
-      throw new BadRequestException('Transfer requires same price');
+    // if (oldScheduling.routeId.toString() !== newScheduling.routeId.toString()) {
+    //   throw new BadRequestException('Transfer must be on the same route');
+    // }
+    if (oldScheduling.price <= newScheduling.price) {
+      throw new BadRequestException('Transfer requires equal or lower price');
     }
 
     // 6. Check new seat availability
@@ -1362,23 +1374,23 @@ export class TicketService {
         paidAt: ticket.paidAt,
         user: ticket.userId
           ? {
-              name: `${ticket.userId.firstName} ${ticket.userId.lastName}`,
-              email: ticket.userId.email,
-              phone: ticket.userId.phone,
-            }
+            name: `${ticket.userId.firstName} ${ticket.userId.lastName}`,
+            email: ticket.userId.email,
+            phone: ticket.userId.phone,
+          }
           : null,
         seat: ticket.seatId?.seatNo,
         scheduling: ticket.schedulingId
           ? {
-              departureDate: ticket.schedulingId.departureDate,
-              etd: ticket.schedulingId.etd,
-            }
+            departureDate: ticket.schedulingId.departureDate,
+            etd: ticket.schedulingId.etd,
+          }
           : null,
         promotion: ticket.promotionId
           ? {
-              name: ticket.promotionId.name,
-              value: ticket.promotionId.value,
-            }
+            name: ticket.promotionId.name,
+            value: ticket.promotionId.value,
+          }
           : null,
       })),
       pagination: {

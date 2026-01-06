@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef, Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectModel, InjectConnection } from '@nestjs/mongoose';
+import { Model, Types, Connection } from 'mongoose';
 import { Scheduling, SchedulingDocument } from './entities/scheduling.entity';
 import { Route, RouteDocument } from '../route/entities/route.entity';
 import { Bus, BusDocument } from '../bus/entities/bus.entity';
@@ -37,6 +37,7 @@ export class SchedulingService {
         @InjectModel(Scheduling.name) private schedulingModel: Model<SchedulingDocument>,
         @InjectModel(Route.name) private routeModel: Model<RouteDocument>,
         @InjectModel(Bus.name) private busModel: Model<BusDocument>,
+        @InjectConnection() private connection: Connection,
         @Inject(forwardRef(() => SchedulingSearchService))
         private schedulingSearchService: SchedulingSearchService,
         private schedulingQueueService: SchedulingQueueService,
@@ -105,12 +106,12 @@ export class SchedulingService {
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const departureDay = new Date(createSchedulingDto.departureDate);
         departureDay.setHours(0, 0, 0, 0);
-        
+
         const etdDate = this.combineDateAndTime(new Date(createSchedulingDto.departureDate), createSchedulingDto.etd);
         const etaDate = eta && arrivalDate ? this.combineDateAndTime(new Date(arrivalDate), eta) : null;
 
         let initialStatus = 'scheduled';
-        
+
         // Nếu ngày khởi hành đã qua (không phải hôm nay) → completed
         if (departureDay < today) {
             initialStatus = 'completed';
@@ -844,5 +845,37 @@ export class SchedulingService {
         combined.setHours(hours, minutes, 0, 0);
 
         return combined;
+    }
+
+    /**
+     * Recalculate bookedSeats for all schedulings based on SUCCESS tickets
+     */
+    async recalculateBookedSeats() {
+        this.logger.log('🔄 Recalculating bookedSeats for all schedulings...');
+
+        const schedulings = await this.schedulingModel.find().exec();
+        let updatedCount = 0;
+
+        for (const scheduling of schedulings) {
+            // Count SUCCESS tickets for this scheduling
+            const successTicketCount = await this.connection.model('Ticket').countDocuments({
+                schedulingId: scheduling._id,
+                status: 'SUCCESS'
+            });
+
+            // Update bookedSeats and availableSeats
+            scheduling.bookedSeats = successTicketCount;
+            scheduling.availableSeats = Math.max(0, (scheduling.availableSeats + scheduling.bookedSeats) - successTicketCount);
+
+            await scheduling.save();
+            updatedCount++;
+        }
+
+        this.logger.log(`✅ Updated bookedSeats for ${updatedCount} schedulings`);
+
+        return {
+            message: `Successfully recalculated bookedSeats for ${updatedCount} schedulings`,
+            updatedCount
+        };
     }
 }
