@@ -45,6 +45,9 @@ export class User {
   @Prop()
   lastLoginIp?: string;
 
+  @Prop({ default: null })
+  avatarUrl?: string;
+
   createdAt?: Date;
   updatedAt?: Date;
 }

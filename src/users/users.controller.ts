@@ -10,13 +10,18 @@ import {
   NotFoundException,
   Query,
   ForbiddenException,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiConsumes,
 } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -75,6 +80,59 @@ export class UsersController {
       updateUserDto,
       { actorId: user.userId },
     );
+    return this.usersService.toResponseDto(updatedUser);
+  }
+
+  @ApiOperation({ summary: 'Upload/update user avatar' })
+  @ApiResponse({
+    status: 200,
+    description: 'Avatar uploaded successfully',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid file format' })
+  @ApiConsumes('multipart/form-data')
+  @Post('profile/avatar')
+  @UseInterceptors(FileInterceptor('avatar'))
+  async uploadAvatar(
+    @GetUser() user: JwtUser,
+    @UploadedFile() file: Express.Multer.File,
+  ): Promise<UserResponseDto> {
+    if (!file) {
+      throw new BadRequestException('Avatar file is required');
+    }
+
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+    ];
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Invalid file format. Only JPG, PNG, and WEBP are allowed',
+      );
+    }
+
+    const updatedUser = await this.usersService.updateAvatar(
+      user.userId,
+      file,
+      { actorId: user.userId },
+    );
+    return this.usersService.toResponseDto(updatedUser);
+  }
+
+  @ApiOperation({ summary: 'Delete user avatar' })
+  @ApiResponse({
+    status: 200,
+    description: 'Avatar deleted successfully',
+    type: UserResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Avatar not found' })
+  @Delete('profile/avatar')
+  async deleteAvatar(@GetUser() user: JwtUser): Promise<UserResponseDto> {
+    const updatedUser = await this.usersService.deleteAvatar(user.userId, {
+      actorId: user.userId,
+    });
     return this.usersService.toResponseDto(updatedUser);
   }
 

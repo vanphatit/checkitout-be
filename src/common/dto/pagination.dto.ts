@@ -1,4 +1,11 @@
-import { IsString, IsOptional, Min, Max, IsInt, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  Min,
+  Max,
+  IsInt,
+  IsBoolean,
+} from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -60,17 +67,45 @@ export class PaginationDto {
     description: 'Bao gồm cả các bản ghi đã xóa (chỉ dành cho admin)',
     default: false,
     example: false,
-    type: Boolean
+    type: Boolean,
   })
   @IsOptional()
-  @Transform(({ value }) => {
-    if (value === undefined || value === null) return false;
-    if (typeof value === 'boolean') return value;
-    if (typeof value === 'string') return value.toLowerCase() === 'true';
-    return false;
-  }, { toClassOnly: true })
+  @Transform(
+    ({ value }) => {
+      if (value === undefined || value === null) return false;
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'string') return value.toLowerCase() === 'true';
+      return false;
+    },
+    { toClassOnly: true },
+  )
   @IsBoolean({ message: 'includeDeleted phải là boolean' })
   includeDeleted?: boolean = false;
+
+  @ApiPropertyOptional({
+    description: 'Lọc theo trạng thái hoạt động',
+    example: true,
+    type: Boolean,
+  })
+  @IsOptional()
+  @Transform(
+    ({ value }) => {
+      if (value === undefined || value === null) {
+        return undefined;
+      }
+      if (typeof value === 'boolean') {
+        return value;
+      }
+      if (typeof value === 'string') {
+        const lower = value.toLowerCase();
+        if (lower === 'true') return true;
+        if (lower === 'false') return false;
+      }
+      return undefined;
+    },
+    { toClassOnly: true },
+  )
+  isActive?: string | boolean; // Allow string to prevent automatic conversion
 }
 
 export interface PaginatedResult<T> {
