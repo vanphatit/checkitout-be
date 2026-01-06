@@ -12,11 +12,13 @@ import { PaymentMethod } from '../enums/payment-method.enum';
 // Flexible phone regex for international and Vietnamese formats
 // Supports: +1234567890, 0901234567, etc.
 const FLEXIBLE_PHONE_REGEX = /^[\+]?[0-9]{10,15}$/;
-const FLEXIBLE_PHONE_MESSAGE = 'Phone number must be 10-15 digits, optionally starting with +';
+const FLEXIBLE_PHONE_MESSAGE =
+  'Phone number must be 10-15 digits, optionally starting with +';
 
 export class CreateTicketDto {
   @ApiPropertyOptional({
-    description: 'Customer phone number (optional for CUSTOMER role, required for ADMIN/SELLER)',
+    description:
+      'Customer phone number (optional for CUSTOMER role, required for ADMIN/SELLER)',
     example: '+1234567890',
   })
   @IsOptional()
@@ -72,4 +74,13 @@ export class CreateTicketDto {
   @IsOptional()
   @IsString()
   fallbackURL?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Promotion code to apply (optional). If not provided, the system will automatically find the applicable promotion based on the departure date.',
+    example: 'GIANG_SINH_VUI_VE',
+  })
+  @IsOptional()
+  @IsString()
+  promotionCode?: string;
 }

@@ -110,6 +110,15 @@ export class PromotionController {
     return this.promoService.findAll(paginationDto, role);
   }
 
+  @Get('code/:code')
+  @ApiOperation({ summary: 'Get promotion by code (public)' })
+  @ApiResponse({ status: 200, description: 'Promotion found' })
+  @ApiResponse({ status: 404, description: 'Promotion not found' })
+  @ApiResponse({ status: 400, description: 'Promotion is not active' })
+  findByCode(@Param('code') code: string) {
+    return this.promoService.findByCode(code);
+  }
+
   @Get(':id')
   @UseGuards(OptionalJwtAuthGuard)
   @ApiOperation({ summary: 'Get promotion by ID' })

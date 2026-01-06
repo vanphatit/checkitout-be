@@ -651,6 +651,189 @@ export class AuthService {
     return this.usersService.toResponseDto(user);
   }
 
+  async validateOAuthUser(oauthProfile: {
+    googleId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    avatarUrl?: string;
+    accessToken?: string;
+  }): Promise<UserDocument | { needsCompletion: true; token: string }> {
+    const normalizedEmail = normalizeEmail(oauthProfile.email);
+
+    // Step 1: Check if user exists by googleId
+    let user = await this.usersService.findByGoogleId(oauthProfile.googleId);
+
+    if (user) {
+      // Existing OAuth user - return user
+      return user;
+    }
+
+    // Step 2: Check if user exists by email
+    user = await this.usersService.findByEmail(normalizedEmail);
+
+    if (user) {
+      // Account linking scenario
+      if (user.status === UserStatus.PRE_REGISTERED) {
+        // Upgrade PRE_REGISTERED user to OAuth user
+        return await this.usersService.linkOAuthProvider(this.getUserId(user), {
+          googleId: oauthProfile.googleId,
+          authProvider: 'google',
+          isOAuthUser: true,
+          status: UserStatus.ACTIVE,
+          email: normalizedEmail,
+          emailVerifiedAt: new Date(), // Google verifies emails
+          avatarUrl: oauthProfile.avatarUrl,
+        });
+      } else if (user.password) {
+        // User has password-based account - link OAuth
+        // Only link if email is verified on existing account
+        if (!user.emailVerifiedAt) {
+          throw new UnauthorizedException(
+            'Please verify your email before linking OAuth providers',
+          );
+        }
+
+        return await this.usersService.linkOAuthProvider(this.getUserId(user), {
+          googleId: oauthProfile.googleId,
+          authProvider: 'google',
+          isOAuthUser: true,
+          avatarUrl: oauthProfile.avatarUrl || user.avatarUrl,
+        });
+      } else {
+        // User exists but no password - likely another OAuth provider
+        return await this.usersService.linkOAuthProvider(this.getUserId(user), {
+          googleId: oauthProfile.googleId,
+          authProvider: 'google',
+          isOAuthUser: true,
+          avatarUrl: oauthProfile.avatarUrl || user.avatarUrl,
+        });
+      }
+    }
+
+    // Step 3: New user - needs to complete registration with phone
+    // Store OAuth data in Redis for 15 minutes
+    const completionToken = crypto.randomBytes(32).toString('hex');
+    const oauthDataKey = `oauth_completion:${completionToken}`;
+
+    await this.redisService.set(
+      oauthDataKey,
+      JSON.stringify({
+        googleId: oauthProfile.googleId,
+        email: normalizedEmail,
+        firstName: oauthProfile.firstName,
+        lastName: oauthProfile.lastName,
+        avatarUrl: oauthProfile.avatarUrl,
+        provider: 'google',
+      }),
+      900, // 15 minutes TTL
+    );
+
+    // Return special response indicating completion needed
+    return {
+      needsCompletion: true,
+      token: completionToken,
+    };
+  }
+
+  async completeOAuthRegistration(
+    completionToken: string,
+    phone: string,
+    password?: string,
+  ) {
+    // Retrieve OAuth data from Redis
+    const oauthDataKey = `oauth_completion:${completionToken}`;
+    const oauthDataStr = await this.redisService.get(oauthDataKey);
+
+    if (!oauthDataStr) {
+      throw new BadRequestException(
+        'Invalid or expired OAuth completion token. Please sign in with Google again.',
+      );
+    }
+
+    const oauthData = JSON.parse(oauthDataStr);
+
+    // Check if phone is already in use
+    const existingUserWithPhone = await this.usersService.findByPhone(phone);
+    if (existingUserWithPhone) {
+      throw new ConflictException('Phone number is already registered');
+    }
+
+    // Hash password if provided
+    let hashedPassword: string | undefined;
+    if (password) {
+      hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+    }
+
+    // Create user with OAuth data + phone
+    const newUser = await this.usersService.create({
+      email: oauthData.email,
+      firstName: oauthData.firstName,
+      lastName: oauthData.lastName,
+      phone: phone,
+      password: hashedPassword, // Optional password
+      googleId: oauthData.googleId,
+      authProvider: oauthData.provider,
+      isOAuthUser: true,
+      isPhoneVerified: false,
+      status: UserStatus.ACTIVE, // OAuth users are auto-active (email verified by Google)
+      emailVerifiedAt: new Date(), // Google verifies emails
+      avatarUrl: oauthData.avatarUrl,
+      role: 'CUSTOMER' as any,
+    } as any);
+
+    // Delete the completion token
+    await this.redisService.del(oauthDataKey);
+
+    return newUser;
+  }
+
+  async oauthLogin(user: UserDocument, request?: Request) {
+    // Check user status (same as regular login)
+    if (user.status === UserStatus.INACTIVE) {
+      throw new UnauthorizedException(
+        'Account has been deactivated. Please contact support.',
+      );
+    }
+
+    if (user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    // Generate same tokens as regular login
+    const tokens = await this.generateTokens(user);
+
+    // Record login (same as regular login)
+    const ipAddress = this.getClientIp(request);
+    const userAgent = request?.headers['user-agent'];
+    const userId = this.getUserId(user);
+
+    await this.usersService.recordSuccessfulLogin(userId, {
+      ipAddress,
+      device: userAgent,
+    });
+
+    // Store refresh token in Redis (same as regular login)
+    await this.redisService.setWithExpiry(
+      `refresh_token:${userId}`,
+      tokens.refreshToken,
+      7 * 24 * 60 * 60, // 7 days
+    );
+
+    // Fetch fresh user data (same as regular login)
+    const freshUser = await this.usersService.findById(userId);
+
+    if (!freshUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Return IDENTICAL response structure to regular login
+    return {
+      user: this.usersService.toResponseDto(freshUser),
+      ...tokens,
+    };
+  }
+
   private getClientIp(request?: Request): string | undefined {
     if (!request) {
       return undefined;

@@ -170,6 +170,10 @@ export class UsersService {
     return this.userModel.findOne({ phone }).exec();
   }
 
+  async findByGoogleId(googleId: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ googleId }).exec();
+  }
+
   async updateStatus(
     id: string,
     status: UserStatus,
@@ -327,6 +331,48 @@ export class UsersService {
     }
 
     return updatedUser!;
+  }
+
+  async linkOAuthProvider(
+    userId: string,
+    oauthData: {
+      googleId?: string;
+      authProvider?: string;
+      isOAuthUser?: boolean;
+      status?: UserStatus;
+      email?: string;
+      emailVerifiedAt?: Date;
+      avatarUrl?: string;
+    },
+    options?: UserOperationOptions,
+  ): Promise<UserDocument> {
+    const user = await this.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const updatedUser = await this.userModel
+      .findByIdAndUpdate(userId, oauthData, { new: true })
+      .exec();
+
+    if (!updatedUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    await this.userActivityService.logUserActivity(
+      userId,
+      UserActivityAction.PROFILE_UPDATED,
+      {
+        performedBy: options?.actorId || userId,
+        description: 'OAuth provider linked to account',
+        metadata: {
+          provider: oauthData.authProvider,
+          googleId: oauthData.googleId,
+        },
+      },
+    );
+
+    return updatedUser;
   }
 
   async delete(id: string, options?: UserOperationOptions): Promise<void> {

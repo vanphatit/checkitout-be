@@ -202,6 +202,21 @@ export class PromotionService {
     return item;
   }
 
+  async findByCode(code: string) {
+    const item = await this.promoModel
+      .findOne({ code: code.toUpperCase() })
+      .exec();
+    if (!item) {
+      throw new NotFoundException(`Promotion with code '${code}' not found`);
+    }
+    if (!item.isActive) {
+      throw new BadRequestException(
+        `Promotion with code '${code}' is not active`,
+      );
+    }
+    return item;
+  }
+
   async update(id: string, dto: UpdatePromotionDto) {
     const existing = await this.promoModel.findById(id).exec();
     if (!existing) throw new NotFoundException('Promotion not found');

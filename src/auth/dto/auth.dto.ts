@@ -61,11 +61,12 @@ export class RegisterDto {
   @MaxLength(50)
   firstName: string;
 
-  @ApiProperty({ example: 'Doe' })
+  @ApiPropertyOptional({ example: 'Doe' })
+  @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(50)
-  lastName: string;
+  lastName?: string;
 
   @ApiProperty({
     example: '+1234567890',
@@ -151,4 +152,46 @@ export class CompleteRegistrationDto {
   @MinLength(PASSWORD_MIN_LENGTH)
   @Matches(PASSWORD_REGEX, { message: PASSWORD_VALIDATION_MESSAGE })
   password: string;
+}
+
+export class CompleteOAuthRegistrationDto {
+  @ApiProperty({
+    example: 'a1b2c3d4e5f6...',
+    description: 'OAuth completion token received after Google login',
+  })
+  @IsString()
+  token: string;
+
+  @ApiProperty({
+    example: '0987654321',
+    description: 'Phone number for the account',
+  })
+  @IsString()
+  @Matches(PHONE_REGEX, { message: PHONE_VALIDATION_MESSAGE })
+  phone: string;
+
+  @ApiPropertyOptional({
+    example: 'Password123!',
+    description:
+      'Optional password (if user wants both OAuth and password login)',
+    minLength: PASSWORD_MIN_LENGTH,
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(PASSWORD_MIN_LENGTH)
+  @Matches(PASSWORD_REGEX, { message: PASSWORD_VALIDATION_MESSAGE })
+  password?: string;
+}
+
+export class OAuthLoginResponseDto {
+  @ApiProperty({ description: 'User information' })
+  user: any; // UserResponseDto
+
+  @ApiProperty({ description: 'JWT access token (15min)' })
+  accessToken: string;
+
+  @ApiProperty({
+    description: 'JWT refresh token (7d) - also in HTTP-only cookie',
+  })
+  refreshToken: string;
 }

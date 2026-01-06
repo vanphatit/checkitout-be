@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { PromotionType } from '../enums/promotion-type.enum';
+import { slugifyVietnamese } from '../../common/utils/slugify.util';
 
 export type PromotionDocument = Promotion & Document & { _id: Types.ObjectId };
 
@@ -10,6 +11,9 @@ export class Promotion {
 
   @Prop({ required: true })
   name: string;
+
+  @Prop({ unique: true, uppercase: true })
+  code: string;
 
   @Prop({ required: true })
   startDate: Date;
@@ -42,7 +46,28 @@ export class Promotion {
 
 export const PromotionSchema = SchemaFactory.createForClass(Promotion);
 
+// Pre-save hook to auto-generate code from name
+PromotionSchema.pre('save', function (next) {
+  // Always generate code if name exists and code doesn't
+  if (this.name && (!this.code || this.isModified('name'))) {
+    this.code = slugifyVietnamese(this.name);
+  }
+  next();
+});
+
+// Pre-update hook to auto-generate code when name is updated
+PromotionSchema.pre('findOneAndUpdate', function (next) {
+  const update = this.getUpdate() as any;
+  if (update && update.name) {
+    update.code = slugifyVietnamese(update.name);
+  } else if (update && update.$set && update.$set.name) {
+    update.$set.code = slugifyVietnamese(update.$set.name);
+  }
+  next();
+});
+
 // Indexes
+PromotionSchema.index({ code: 1 }, { unique: true });
 PromotionSchema.index({ type: 1, isActive: 1 });
 PromotionSchema.index({ startDate: 1, expiryDate: 1 });
 PromotionSchema.index({ recurringMonth: 1, recurringDay: 1 });
