@@ -23,6 +23,7 @@ import { CommonModule } from './common/common.module';
 import { SeederModule } from './common/seeder/seeder.module';
 import { SearchModule } from './modules/search/search.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { StatisticsModule } from './statistics/statistics.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     PromotionModule,
     TicketModule,
     PaymentModule,
+    StatisticsModule,
   ],
   controllers: [AppController],
   providers: [
