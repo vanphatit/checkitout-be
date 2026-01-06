@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { SchedulingService } from './scheduling.service';
+import { SchedulingService, CreateSchedulingResponse, BulkSchedulingResponse } from './scheduling.service';
 import {
     CreateSchedulingDto,
     UpdateSchedulingDto,
@@ -55,7 +55,7 @@ export class SchedulingController {
     })
     @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
     @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
-    create(@Body() createSchedulingDto: CreateSchedulingDto) {
+    create(@Body() createSchedulingDto: CreateSchedulingDto): Promise<CreateSchedulingResponse> {
         return this.schedulingService.create(createSchedulingDto);
     }
 
@@ -70,7 +70,7 @@ export class SchedulingController {
     })
     @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ' })
     @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
-    createBulk(@Body() createBulkSchedulingDto: CreateBulkSchedulingDto) {
+    createBulk(@Body() createBulkSchedulingDto: CreateBulkSchedulingDto): Promise<BulkSchedulingResponse> {
         return this.schedulingService.createBulk(createBulkSchedulingDto);
     }
 
@@ -331,15 +331,34 @@ export class SchedulingController {
     @ApiResponse({ status: 400, description: 'File Excel không hợp lệ' })
     @ApiResponse({ status: 403, description: 'Không có quyền truy cập' })
     async importFromExcel(@UploadedFile() file: Express.Multer.File) {
-        if (!file) {
-            throw new Error('Vui lòng chọn file Excel để upload');
-        }
+        try {
+            if (!file) {
+                throw new Error('Vui lòng chọn file Excel để upload');
+            }
 
-        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
-            throw new Error('File phải có định dạng Excel (.xlsx hoặc .xls)');
-        }
+            if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+                throw new Error('File phải có định dạng Excel (.xlsx hoặc .xls)');
+            }
 
-        return this.excelImportService.importFromExcel(file);
+            console.log('📂 File uploaded:', {
+                originalname: file.originalname,
+                mimetype: file.mimetype,
+                size: file.size,
+            });
+
+            const result = await this.excelImportService.importFromExcel(file);
+
+            console.log('✅ Import completed:', {
+                totalRows: result.totalRows,
+                successCount: result.successCount,
+                errorCount: result.errorCount,
+            });
+
+            return result;
+        } catch (error) {
+            console.error('❌ Import failed in controller:', error.message);
+            throw error;
+        }
     }
 
     @Post('import/validate')

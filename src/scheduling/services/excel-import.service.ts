@@ -23,7 +23,7 @@ export class ExcelImportService {
     @InjectModel(Route.name) private routeModel: Model<RouteDocument>,
     @InjectModel(Bus.name) private busModel: Model<BusDocument>,
     private excelProcessingService: ExcelProcessingService,
-  ) {}
+  ) { }
 
   /**
    * Import scheduling data from Excel file
@@ -32,36 +32,75 @@ export class ExcelImportService {
     file: Express.Multer.File,
   ): Promise<ExcelImportResultDto> {
     try {
+      console.log('🔄 Starting Excel import process...');
+
       // Parse Excel file
       const rawData = await this.excelProcessingService.parseExcelFile(
         file.buffer,
       );
 
       if (rawData.length === 0) {
-        throw new BadRequestException('File Excel không chứa dữ liệu hợp lệ');
+        console.log('⚠️ No data found in Excel file');
+        return {
+          totalRows: 0,
+          successCount: 0,
+          errorCount: 1,
+          createdSchedules: [],
+          errors: [{
+            row: 0,
+            field: 'file',
+            message: 'File Excel không chứa dữ liệu hợp lệ'
+          }],
+          warnings: [],
+        };
       }
+
+      console.log(`📊 Found ${rawData.length} rows in Excel file`);
 
       // Validate Excel data
       const { validRows, errors } =
         await this.excelProcessingService.validateExcelData(rawData);
 
+      console.log(`✅ Valid rows: ${validRows.length}, ❌ Invalid rows: ${errors.length}`);
+
       // Process valid rows
       const result = await this.processValidRows(validRows);
+
+      // Merge validation errors and processing errors
+      const allErrors = [
+        ...errors,
+        ...(result.errors || []),
+      ];
+
+      console.log(`📈 Final result - Success: ${result.successCount}, Errors: ${allErrors.length}`);
 
       // Generate final report
       return {
         totalRows: rawData.length,
         successCount: result.successCount || 0,
-        errorCount: errors.length,
+        errorCount: allErrors.length,
         createdSchedules: result.createdSchedules || [],
-        errors,
+        errors: allErrors,
         warnings: result.warnings || [],
       };
     } catch (error) {
-      if (error instanceof BadRequestException) {
-        throw error;
-      }
-      throw new BadRequestException(`Lỗi khi import Excel: ${error.message}`);
+      console.error('💥 Exception in importFromExcel:', error.message);
+
+      // Return error response instead of throwing
+      return {
+        totalRows: 0,
+        successCount: 0,
+        errorCount: 1,
+        createdSchedules: [],
+        errors: [{
+          row: 0,
+          field: 'system',
+          message: error instanceof BadRequestException
+            ? error.message
+            : `Lỗi hệ thống khi import Excel: ${error.message}`
+        }],
+        warnings: [],
+      };
     }
   }
 
@@ -75,15 +114,26 @@ export class ExcelImportService {
     const errors: any[] = [];
     const warnings: any[] = [];
 
+    console.log('🔍 Processing valid rows:', validRows.length);
+
     // Get lookup data
     const routeLookup = await this.createRouteLookup();
     const busLookup = await this.createBusLookup();
 
+    console.log('📍 Available routes:', Array.from(routeLookup.keys()));
+    console.log('🚌 Available buses:', Array.from(busLookup.keys()));
+
     for (const row of validRows) {
       try {
+        console.log(`\n🔎 Processing row ${row.rowIndex}:`, {
+          routeName: row.routeName,
+          plateNo: row.plateNo,
+        });
+
         // Find route by name
         const route = routeLookup.get(row.routeName.trim().toLowerCase());
         if (!route) {
+          console.log(`❌ Route not found: "${row.routeName}"`);
           errors.push({
             row: row.rowIndex || 0,
             field: 'routeName',
@@ -92,10 +142,12 @@ export class ExcelImportService {
           });
           continue;
         }
+        console.log(`✅ Route found:`, route.name);
 
         // Find bus by plate number
         const bus = busLookup.get(row.plateNo.trim().toLowerCase());
         if (!bus) {
+          console.log(`❌ Bus not found: "${row.plateNo}"`);
           errors.push({
             row: row.rowIndex || 0,
             field: 'plateNo',
@@ -269,9 +321,9 @@ export class ExcelImportService {
    * Validate import data before processing
    */
   async validateImportData(file: Express.Multer.File): Promise<{
-    isValid: boolean;
-    errors: string[];
-    preview: any[];
+    valid: number;
+    invalid: number;
+    errors: Array<{ row: number; field: string; message: string }>;
   }> {
     try {
       const rawData = await this.excelProcessingService.parseExcelFile(
@@ -280,18 +332,20 @@ export class ExcelImportService {
       const { validRows, errors } =
         await this.excelProcessingService.validateExcelData(rawData);
 
-      const preview = rawData.slice(0, 5); // Show first 5 rows as preview
-
       return {
-        isValid: errors.length === 0,
-        errors: errors.map((error) => `Dòng ${error.row}: ${error.message}`),
-        preview,
+        valid: validRows.length,
+        invalid: errors.length,
+        errors: errors.map((error) => ({
+          row: error.row,
+          field: error.field || 'unknown',
+          message: error.message,
+        })),
       };
     } catch (error) {
       return {
-        isValid: false,
-        errors: [error.message],
-        preview: [],
+        valid: 0,
+        invalid: 0,
+        errors: [{ row: 0, field: 'file', message: error.message }],
       };
     }
   }
