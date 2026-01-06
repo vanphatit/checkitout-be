@@ -60,4 +60,24 @@ export class RedisService implements OnModuleDestroy {
   async onModuleDestroy() {
     await this.client.quit();
   }
+
+  static async clearAllCaches(): Promise<void> {
+    const client = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: parseInt(process.env.REDIS_PORT || '6379'),
+      password: process.env.REDIS_PASSWORD || undefined,
+      enableReadyCheck: false,
+      maxRetriesPerRequest: null,
+    });
+
+    return new Promise((resolve, reject) => {
+      client.flushall((err, succeeded) => {
+        client.quit();
+        if (err) {
+          return reject(err);
+        }
+        resolve();
+      });
+    });
+  }
 }

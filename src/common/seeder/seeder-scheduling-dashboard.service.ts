@@ -37,6 +37,9 @@ export class SeederSchedulingDashboardService {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
+        // Format date as YYYY-MM-DD without timezone conversion
+        const todayString = `${today.getFullYear()}-${(today.getMonth() + 1).toString().padStart(2, '0')}-${today.getDate().toString().padStart(2, '0')}`;
+
         // Create 10-15 schedulings for today with varied times
         const totalSchedulings = faker.number.int({ min: 10, max: 15 });
         this.logger.log(`🎯 Sẽ tạo ${totalSchedulings} schedulings cho hôm nay`);
@@ -44,17 +47,53 @@ export class SeederSchedulingDashboardService {
         let totalCreated = 0;
         let totalConflicts = 0;
 
+        const now = new Date();
+        const currentHour = now.getHours();
+        const currentMinute = now.getMinutes();
+
+        this.logger.log(`⏰ Giờ hiện tại: ${currentHour}:${currentMinute.toString().padStart(2, '0')}`);
+
         for (let i = 0; i < totalSchedulings; i++) {
             try {
                 const route = faker.helpers.arrayElement(routes);
                 const bus = faker.helpers.arrayElement(buses);
 
-                // Generate departure time throughout the day
-                const hours = faker.number.int({ min: 5, max: 22 });
-                const minutes = faker.helpers.arrayElement([0, 15, 30, 45]);
+                let hours: number;
+                let minutes: number;
+
+                // Phân bổ schedulings theo status:
+                // 30% đã hoàn thành (ETD & ETA trong quá khứ)
+                // 40% đang chạy (ETD quá khứ, ETA tương lai)
+                // 30% đã lên lịch (ETD tương lai)
+                const rand = Math.random();
+
+                if (rand < 0.3) {
+                    // COMPLETED: ETD + ETA chắc chắn < now
+                    // ETD: 5h-12h, duration: 1-3h → ETA tối đa 15h
+                    const maxETD = Math.min(12, currentHour - 4);
+                    hours = faker.number.int({ min: 5, max: Math.max(5, maxETD) });
+                    minutes = faker.helpers.arrayElement([0, 15, 30, 45]);
+                } else if (rand < 0.7) {
+                    // IN-PROGRESS: ETD trước giờ hiện tại
+                    hours = faker.number.int({ min: Math.max(5, currentHour - 6), max: Math.max(6, currentHour - 1) });
+                    minutes = faker.helpers.arrayElement([0, 15, 30, 45]);
+                } else {
+                    // SCHEDULED: ETD sau giờ hiện tại
+                    hours = faker.number.int({ min: Math.min(currentHour + 1, 22), max: 23 });
+                    minutes = faker.helpers.arrayElement([0, 15, 30, 45]);
+                }
+
                 const departureTime = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 
-                const durationInMinutes = route.estimatedDuration || Math.floor((route.distance || 100) * 1.2);
+                // Duration phụ thuộc vào status mục tiêu
+                let durationInMinutes: number;
+                if (rand < 0.3) {
+                    // COMPLETED: duration ngắn (1-3h) đảm bảo ETA < now
+                    durationInMinutes = faker.number.int({ min: 60, max: 180 });
+                } else {
+                    // IN-PROGRESS hoặc SCHEDULED: dùng duration thực của route
+                    durationInMinutes = route.estimatedDuration || Math.floor((route.distance || 100) * 1.2);
+                }
 
                 // Create departure datetime for today
                 const departureDateTime = new Date(today);
@@ -66,13 +105,18 @@ export class SeederSchedulingDashboardService {
 
                 const arrivalTime = `${arrivalDateTime.getHours().toString().padStart(2, '0')}:${arrivalDateTime.getMinutes().toString().padStart(2, '0')}`;
 
+                // Debug log
+                if (i < 3) {
+                    this.logger.debug(`Scheduling ${i + 1}: ETD ${departureTime}, ETA ${arrivalTime}, Duration ${durationInMinutes}m, Target status: ${rand < 0.3 ? 'COMPLETED' : rand < 0.7 ? 'IN-PROGRESS' : 'SCHEDULED'}`);
+                }
+
                 // Use SchedulingService.create() instead of direct DB creation
                 const result = await this.schedulingService.create({
                     routeId: route._id.toString(),
                     busIds: [bus._id.toString()],
                     etd: departureTime,
                     eta: arrivalTime,
-                    departureDate: today.toISOString().split('T')[0],
+                    departureDate: todayString,  // Use formatted date string
                     price: (route.basePrice || 100000) + faker.number.int({ min: -20000, max: 50000 }),
                     driver: {
                         name: faker.person.fullName(),

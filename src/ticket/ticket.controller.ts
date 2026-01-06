@@ -36,7 +36,7 @@ import { TicketStatus } from './enums/ticket-status.enum';
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth('JWT-auth')
 export class TicketController {
-  constructor(private readonly ticketService: TicketService) {}
+  constructor(private readonly ticketService: TicketService) { }
 
   @Post()
   @ApiOperation({
@@ -79,7 +79,8 @@ export class TicketController {
       throw new BadRequestException('Invalid user role');
     }
 
-    return this.ticketService.create({ ...dto, phone: customerPhone });
+    // Pass role to service for validation logic
+    return this.ticketService.create({ ...dto, phone: customerPhone, createdByRole: userRole });
   }
 
   @Post('create-and-pay')
@@ -147,6 +148,7 @@ export class TicketController {
     const ticket = await this.ticketService.create({
       ...dto,
       phone: customerPhone,
+      createdByRole: userRole,
     });
 
     if (!ticket || !ticket._id) {

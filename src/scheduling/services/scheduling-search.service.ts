@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SearchService } from '../../modules/search/search.service';
 import { Scheduling } from '../entities/scheduling.entity';
+import { OnEvent } from '@nestjs/event-emitter';
 
 @Injectable()
 export class SchedulingSearchService implements OnModuleInit {
@@ -248,5 +249,27 @@ export class SchedulingSearchService implements OnModuleInit {
       schedulings,
       total: result.hits.total.value,
     };
+  }
+
+  /**
+   * Update Elasticsearch when scheduling status changes via Bull Queue
+   */
+  @OnEvent('scheduling.status.changed')
+  async handleStatusChanged(payload: {
+    schedulingId: string;
+    oldStatus: string;
+    newStatus: string;
+  }) {
+    try {
+      this.logger.log(`Updating Elasticsearch for scheduling ${payload.schedulingId}: ${payload.oldStatus} → ${payload.newStatus}`);
+
+      const scheduling = await this.schedulingModel.findById(payload.schedulingId).populate('routeId', 'name');
+      if (scheduling) {
+        await this.indexScheduling(scheduling);
+        this.logger.log(`Successfully updated Elasticsearch for scheduling ${payload.schedulingId}`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to update Elasticsearch for scheduling ${payload.schedulingId}:`, error);
+    }
   }
 }

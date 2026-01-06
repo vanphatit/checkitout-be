@@ -16,6 +16,7 @@ import { SchedulingSearchService } from '../../scheduling/services/scheduling-se
 import { SchedulingService } from '../../scheduling/scheduling.service';
 import { SeederDashboardService } from './seeder-dashboard.service';
 import { SeederSchedulingDashboardService } from './seeder-scheduling-dashboard.service';
+import { RedisService } from 'src/modules/redis/redis.service';
 
 @Injectable()
 export class SeederService {
@@ -92,6 +93,14 @@ export class SeederService {
             this.seatModel.deleteMany({}),
             this.ticketModel.deleteMany({}),
         ]);
+
+
+        // Clear Redis cache
+        RedisService.clearAllCaches().then(() => {
+            this.logger.log('✅ Đã xóa cache Redis');
+        }).catch((error) => {
+            this.logger.warn('⚠️ Không thể xóa cache Redis:', error.message);
+        });
 
         // Clear Elasticsearch index
         try {

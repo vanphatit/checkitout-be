@@ -400,4 +400,14 @@ export class SchedulingController {
 
         res.send(buffer);
     }
+
+    @Post('recalculate-booked-seats')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Recalculate bookedSeats cho tất cả schedulings (Admin only)' })
+    @ApiResponse({ status: 200, description: 'Đã cập nhật bookedSeats thành công' })
+    async recalculateBookedSeats() {
+        return this.schedulingService.recalculateBookedSeats();
+    }
 }
