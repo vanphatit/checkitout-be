@@ -1,0 +1,1831 @@
+{
+    "info": {
+        "_postman_id": "checkitout-api-complete",
+        "name": "CheckItOut - Complete Auto-Flow Collection",
+        "description": {
+            "content": "# CheckItOut API - Complete Auto-Flow Collection\\n\\n🚌 **Complete test collection với auto-flow từ đầu đến cuối**\\n\\n## 🚀 **AUTO-FLOW FEATURES:**\\n\\n### **Cách dùng:**\\n1. Import collection vào Postman\\n2. Click Run Collection → Select All → Run\\n3. Tất cả variables tự động set từ API responses\\n4. Zero manual work needed!\\n\\n### **Auto-Flow Sequence:**\\n1. ✅ **Login Admin** → Set adminToken\\n2. ✅ **Seed All Data** → Create sample data\\n3. ✅ **Get Stations** → Set stationId1, stationId2\\n4. ✅ **Get Buses** → Set busId1\\n5. ✅ **Create Route** → Set routeId1\\n6. ✅ **Create Schedule** → Set scheduleId1\\n7. ✅ All other APIs work automatically\\n\\n## 📋 **Complete Feature Set:**\\n\\n### **Phase 1: Authentication & Setup**\\n- Login Admin với auto-token setting\\n- Seed data tự động\\n- Excel templates generation\\n\\n### **Phase 2: Core Management**\\n- Station Management với GPS\\n- Route Management với OpenStreetMap\\n- Bus Management với seat generation\\n- Schedule Management với validation\\n\\n### **Phase 3: Advanced Features**\\n- Excel Import/Export với validation\\n- Seat Management và booking\\n- User Management và profiles\\n- OpenStreetMap integration\\n\\n### **Phase 4: Testing & Verification**\\n- Complete API testing\\n- Error handling verification\\n- Performance monitoring\\n- Data integrity checks\\n\\n**🔥 Import → Run Collection → Complete system test in 2 minutes!**",
+            "type": "text/markdown"
+        },
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "item": [
+        {
+            "name": "🔐 Authentication",
+            "item": [
+                {
+                    "name": "1. Login Admin",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data.accessToken) {",
+                                    "        pm.environment.set('adminToken', jsonData.data.accessToken);",
+                                    "        pm.environment.set('adminId', jsonData.data.user.id);",
+                                    "        console.log('✅ Admin login successful');",
+                                    "        console.log('Token saved: ' + jsonData.data.accessToken.substring(0, 20) + '...');",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Admin login failed');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"admin1@checkitout.com\",\n  \"password\": \"Admin123!\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "Đăng nhập với tài khoản admin có sẵn từ seeder.\n\n**Credentials:**\n- Email: admin1@checkitout.com\n- Password: Admin123!\n\n**Response sẽ trả về access token để sử dụng cho các API khác.**"
+                    }
+                },
+                {
+                    "name": "2. Register Customer",
+                    "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "exec": [
+                                    "// Generate valid customer data",
+                                    "const timestamp = Date.now();",
+                                    "const randomNum = Math.floor(Math.random() * 10000);",
+                                    "",
+                                    "// Generate valid email",
+                                    "const email = `customer_${timestamp}_${randomNum}@checkitout.test`;",
+                                    "pm.environment.set('newCustomerEmail', email);",
+                                    "",
+                                    "// Generate strong password (8+ chars, uppercase, lowercase, number, special char)",
+                                    "const password = `Test@${randomNum}Pass`;",
+                                    "pm.environment.set('newCustomerPassword', password);",
+                                    "",
+                                    "// Generate valid Vietnamese phone number (10 digits, starts with 0)",
+                                    "const phonePrefix = ['090', '091', '093', '094', '097', '098', '032', '033', '034', '035', '036', '037', '038', '039', '070', '079', '077', '076', '078', '083', '084', '085', '081', '082', '088', '056', '058', '059'];",
+                                    "const prefix = phonePrefix[Math.floor(Math.random() * phonePrefix.length)];",
+                                    "const suffix = Math.floor(Math.random() * 10000000).toString().padStart(7, '0');",
+                                    "const phone = prefix + suffix;",
+                                    "pm.environment.set('newCustomerPhone', phone);",
+                                    "",
+                                    "// Generate Vietnamese firstName and lastName (2-50 chars each)",
+                                    "const firstNames = ['An', 'Bình', 'Hùng', 'Dũng', 'Long', 'Linh', 'Mai', 'Lan', 'Hoa', 'Phương', 'Minh', 'Thành', 'Tuấn', 'Hải', 'Anh'];",
+                                    "const lastNames = ['Nguyễn', 'Trần', 'Lê', 'Phạm', 'Hoàng', 'Huỳnh', 'Võ', 'Phan', 'Vũ', 'Đặng'];",
+                                    "const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];",
+                                    "const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];",
+                                    "pm.environment.set('newCustomerFirstName', firstName);",
+                                    "pm.environment.set('newCustomerLastName', lastName);",
+                                    "",
+                                    "console.log('✨ Generated valid customer data:');",
+                                    "console.log('📧 Email: ' + email);",
+                                    "console.log('🔑 Password: ' + password);",
+                                    "console.log('📱 Phone: ' + phone);",
+                                    "console.log('👤 First Name: ' + firstName);",
+                                    "console.log('👤 Last Name: ' + lastName);"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        },
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    console.log('✅ Customer registration successful');",
+                                    "    ",
+                                    "    // Save credentials to environment for later use",
+                                    "    const email = pm.environment.get('newCustomerEmail');",
+                                    "    const password = pm.environment.get('newCustomerPassword');",
+                                    "    ",
+                                    "    pm.environment.set('customerEmail', email);",
+                                    "    pm.environment.set('customerPassword', password);",
+                                    "    ",
+                                    "    console.log('💾 Saved customer credentials to environment');",
+                                    "    console.log('📧 Email: ' + email);",
+                                    "    console.log('🔑 Password: ' + password);",
+                                    "    ",
+                                    "    // Try to get customer ID from response",
+                                    "    try {",
+                                    "        const jsonData = pm.response.json();",
+                                    "        if (jsonData.data && jsonData.data._id) {",
+                                    "            pm.environment.set('customerId', jsonData.data._id);",
+                                    "            console.log('🆔 Customer ID: ' + jsonData.data._id);",
+                                    "        }",
+                                    "    } catch (e) {",
+                                    "        console.log('⚠️ Could not extract customer ID from response');",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Customer registration failed');",
+                                    "    console.log('📊 Status: ' + pm.response.code);",
+                                    "    try {",
+                                    "        const errorData = pm.response.json();",
+                                    "        console.log('💬 Error: ' + JSON.stringify(errorData));",
+                                    "    } catch (e) {",
+                                    "        console.log('💬 Error parsing response');",
+                                    "    }",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"{{newCustomerEmail}}\",\n  \"password\": \"{{newCustomerPassword}}\",\n  \"firstName\": \"{{newCustomerFirstName}}\",\n  \"lastName\": \"{{newCustomerLastName}}\",\n  \"phone\": \"{{newCustomerPhone}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/register",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "register"
+                            ]
+                        },
+                        "description": "Đăng ký tài khoản khách hàng mới với data được generate tự động.\n\n**Auto-generated:**\n- Email: Valid format với timestamp\n- Password: Đạt yêu cầu (8+ chars, uppercase, lowercase, number, special char)\n- Phone: Số điện thoại Việt Nam hợp lệ (10 số)\n- First Name: Tên tiếng Việt có dấu (2-50 chars)\n- Last Name: Họ tiếng Việt có dấu (2-50 chars)\n\n**Credentials được lưu vào environment:**\n- `customerEmail`\n- `customerPassword`\n- `customerId`"
+                    }
+                },
+                {
+                    "name": "3. Login Customer",
+                    "event": [
+                        {
+                            "listen": "prerequest",
+                            "script": {
+                                "exec": [
+                                    "// Check if we have registered customer credentials",
+                                    "const regEmail = pm.environment.get('customerEmail');",
+                                    "const regPassword = pm.environment.get('customerPassword');",
+                                    "",
+                                    "if (regEmail && regPassword) {",
+                                    "    console.log('✅ Using registered customer credentials');",
+                                    "    console.log('📧 Email: ' + regEmail);",
+                                    "} else {",
+                                    "    console.log('⚠️ No registered credentials found, using default seeded account');",
+                                    "    pm.environment.set('customerEmail', 'user1@checkitout.com');",
+                                    "    pm.environment.set('customerPassword', 'User123!');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        },
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data.accessToken) {",
+                                    "        pm.environment.set('customerToken', jsonData.data.accessToken);",
+                                    "        pm.environment.set('customerId', jsonData.data.user.id);",
+                                    "        console.log('✅ Customer login successful');",
+                                    "        console.log('🔑 Token: ' + jsonData.data.accessToken.substring(0, 20) + '...');",
+                                    "        console.log('🆔 Customer ID: ' + jsonData.data.user.id);",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Customer login failed');",
+                                    "    console.log('📊 Status: ' + pm.response.code);",
+                                    "    try {",
+                                    "        const errorData = pm.response.json();",
+                                    "        console.log('💬 Error: ' + JSON.stringify(errorData));",
+                                    "    } catch (e) {",
+                                    "        console.log('💬 Error parsing response');",
+                                    "    }",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/auth/login",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "auth",
+                                "login"
+                            ]
+                        },
+                        "description": "Đăng nhập với tài khoản customer.\n\n**Auto-detection:**\n- Nếu vừa register (có `customerEmail` và `customerPassword`): Dùng credentials vừa tạo\n- Nếu không: Dùng default seeded account (user1@checkitout.com)\n\n**Saves to environment:**\n- `customerToken` - Access token\n- `customerId` - User ID"
+                    }
+                }
+            ],
+            "description": "Authentication endpoints để lấy token cho các API calls."
+        },
+        {
+            "name": "🌱 Data Seeding",
+            "item": [
+                {
+                    "name": "1. Seed All Data",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    console.log('✅ Data seeding completed successfully');",
+                                    "    console.log('📊 Seeded data summary:');",
+                                    "    if (jsonData.data) {",
+                                    "        console.log('- Stations: ' + (jsonData.data.stations || 'N/A'));",
+                                    "        console.log('- Buses: ' + (jsonData.data.buses || 'N/A'));",
+                                    "        console.log('- Routes: ' + (jsonData.data.routes || 'N/A'));",
+                                    "        console.log('- Schedules: ' + (jsonData.data.schedules || 'N/A'));",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Data seeding failed');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": ""
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/seeder/seed-all",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "seeder",
+                                "seed-all"
+                            ]
+                        },
+                        "description": "Tạo data mẫu bao gồm:\n- 10 stations (trạm xe)\n- 20 buses (xe khách)\n- 15 routes (tuyến đường) \n- 240+ schedules (lịch trình)\n\n**Chỉ admin mới có quyền thực hiện.**"
+                    }
+                },
+                {
+                    "name": "2. Seed Excel Templates",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200 || pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    console.log('✅ Excel templates created successfully');",
+                                    "    console.log('📊 Template files:');",
+                                    "    if (jsonData.data && jsonData.data.templates) {",
+                                    "        jsonData.data.templates.forEach(function(template) {",
+                                    "            console.log('- ' + template);",
+                                    "        });",
+                                    "    }",
+                                    "    if (jsonData.data && jsonData.data.usage) {",
+                                    "        console.log('📝 Usage guide:');",
+                                    "        console.log('- Simple: ' + jsonData.data.usage.simple);",
+                                    "        console.log('- Comprehensive: ' + jsonData.data.usage.comprehensive);",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Excel templates creation failed');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": ""
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/seeder/seed-excel-templates",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "seeder",
+                                "seed-excel-templates"
+                            ]
+                        },
+                        "description": "Tạo Excel templates cho import lịch trình:\n\n**Templates được tạo:**\n- `lich_trinh_import_template.xlsx`: Template đơn giản với dữ liệu mẫu\n- `lich_trinh_comprehensive_template.xlsx`: Template đầy đủ với hướng dẫn chi tiết\n\n**Features:**\n- 📋 Hướng dẫn sử dụng chi tiết\n- 📊 Danh sách tuyến đường có sẵn\n- 🚌 Danh sách xe khả dụng\n- 💡 Dữ liệu mẫu thực tế\n- 🎨 Format Excel chuẩn với styling\n\n**Chỉ admin mới có quyền thực hiện.**"
+                    }
+                },
+                {
+                    "name": "3. Generate Geocoded Vietnam Excel",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test(\"Generate geocoded Excel success\", function () {",
+                                    "    pm.response.to.have.status(201);",
+                                    "});",
+                                    "",
+                                    "const responseData = pm.response.json();",
+                                    "console.log('📊 Generated file:', responseData.fileName);",
+                                    "console.log('🌍 Geocoded stations:', responseData.stats?.geocodedStations);",
+                                    "console.log('📍 Total stations:', responseData.stats?.totalStations);"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": ""
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/seeder/generate-real-data-excel",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "seeder",
+                                "generate-real-data-excel"
+                            ]
+                        },
+                        "description": "Tạo file Excel với dữ liệu thực tế có tọa độ GPS từ geocoding API:\n\n**Features được tạo:**\n- 🌍 Real geocoded coordinates từ Nominatim API\n- 🚌 Comprehensive Vietnamese bus data\n- 📍 74+ stations với GPS coordinates thật\n- 🛣️ 50+ routes với thông tin chi tiết\n- 📅 150+ schedules với tài xế Việt Nam\n- 💾 File Excel 138KB với 6 sheets đầy đủ\n\n**Geocoding Features:**\n- ✅ FREE OpenStreetMap Nominatim API\n- ✅ Rate limiting (1 req/sec)\n- ✅ Fallback coordinates cho Vietnam\n- ✅ Real Vietnamese addresses\n- ✅ Authentic TPHCM-Đà Lạt route\n\n**Generated File Contains:**\n- Bến xe Miền Tây, TP.HCM với GPS thật\n- Chợ Bến Thành với coordinates chính xác\n- Sân bay Tân Sơn Nhất geocoded\n- 20+ Vietnamese bus terminals\n- Complete route data with distances\n\n**Chỉ admin mới có quyền thực hiện.**"
+                    }
+                }
+            ],
+            "description": "Endpoints để tạo data mẫu cho hệ thống với geocoding thực tế."
+        },
+        {
+            "name": "🚏 Station Management",
+            "item": [
+                {
+                    "name": "1. Get All Stations",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data.data && jsonData.data.data.length > 0) {",
+                                    "        var firstStation = jsonData.data.data[0];",
+                                    "        pm.environment.set('stationId1', firstStation._id);",
+                                    "        console.log('✅ Got stations list');",
+                                    "        console.log('📍 First station: ' + firstStation.name);",
+                                    "        console.log('🆔 Station ID saved: ' + firstStation._id);",
+                                    "        ",
+                                    "        if (jsonData.data.data.length > 1) {",
+                                    "            var secondStation = jsonData.data.data[1];",
+                                    "            pm.environment.set('stationId2', secondStation._id);",
+                                    "            console.log('📍 Second station: ' + secondStation.name);",
+                                    "            console.log('🆔 Station ID2 saved: ' + secondStation._id);",
+                                    "        }",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Failed to get stations');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/stations?page=1&limit=10&search=&sortBy=name&sortOrder=asc",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stations"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1",
+                                    "description": "Trang hiện tại"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10",
+                                    "description": "Số bản ghi mỗi trang"
+                                },
+                                {
+                                    "key": "search",
+                                    "value": "",
+                                    "description": "Tìm kiếm theo tên hoặc địa chỉ"
+                                },
+                                {
+                                    "key": "sortBy",
+                                    "value": "name",
+                                    "description": "Sắp xếp theo trường (name, createdAt, etc.)"
+                                },
+                                {
+                                    "key": "sortOrder",
+                                    "value": "asc",
+                                    "description": "Thứ tự sắp xếp (asc/desc)"
+                                }
+                            ]
+                        },
+                        "description": "Lấy danh sách tất cả trạm xe với phân trang.\n\n**Response bao gồm:**\n- Danh sách trạm với response DTO format\n- Pagination metadata\n- Tọa độ GPS của mỗi trạm\n\n**Query Parameters:**\n- `page`: Trang hiện tại\n- `limit`: Số bản ghi mỗi trang\n- `search`: Tìm kiếm theo tên/địa chỉ\n- `sortBy`: Trường sắp xếp\n- `sortOrder`: Thứ tự (asc/desc)"
+                    }
+                },
+                {
+                    "name": "2. Create New Station",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data._id) {",
+                                    "        pm.environment.set('newStationId', jsonData.data._id);",
+                                    "        console.log('✅ Station created successfully');",
+                                    "        console.log('📍 Station: ' + jsonData.data.name);",
+                                    "        console.log('🆔 ID: ' + jsonData.data._id);",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Failed to create station');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Bến xe Test Station\",\n  \"address\": \"123 Đường Test, Quận 1, TP.HCM\",\n  \"description\": \"Trạm test được tạo từ Postman\",\n  \"longitude\": 106.6297,\n  \"latitude\": 10.8231,\n  \"facilities\": [\"wifi\", \"parking\", \"restroom\", \"food_court\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/stations",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stations"
+                            ]
+                        },
+                        "description": "Tạo trạm xe mới.\n\n**Yêu cầu quyền:** ADMIN hoặc SELLER\n\n**Fields:**\n- `name`: Tên trạm (required)\n- `address`: Địa chỉ (required)\n- `longitude/latitude`: Tọa độ GPS (required)\n- `description`: Mô tả (optional)\n- `facilities`: Các tiện ích (optional)"
+                    }
+                },
+                {
+                    "name": "3. Create Station from Address",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Bến xe OpenStreetMap\",\n  \"address\": \"Bến xe Miền Đông, TP.HCM\",\n  \"description\": \"Trạm được tạo từ địa chỉ sử dụng OpenStreetMap\",\n  \"facilities\": [\"wifi\", \"parking\", \"restroom\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/stations/from-address",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stations",
+                                "from-address"
+                            ]
+                        },
+                        "description": "Tạo trạm từ địa chỉ sử dụng OpenStreetMap geocoding.\n\n**Hệ thống sẽ tự động:**\n- Tìm tọa độ từ địa chỉ\n- Lấy thông tin chi tiết từ OSM\n- Tạo trạm với metadata đầy đủ"
+                    }
+                },
+                {
+                    "name": "4. Search Stations",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/stations/search?q=Miền",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stations",
+                                "search"
+                            ],
+                            "query": [
+                                {
+                                    "key": "q",
+                                    "value": "Miền",
+                                    "description": "Từ khóa tìm kiếm"
+                                }
+                            ]
+                        },
+                        "description": "Tìm kiếm trạm theo tên hoặc địa chỉ.\n\n**Tìm kiếm fuzzy matching không phân biệt hoa thường.**"
+                    }
+                },
+                {
+                    "name": "5. Get Station Details",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/stations/{{stationId1}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stations",
+                                "{{stationId1}}"
+                            ]
+                        },
+                        "description": "Lấy thông tin chi tiết của 1 trạm.\n\n**Response bao gồm tất cả thông tin:**\n- Tọa độ GPS\n- Tiện ích có sẵn\n- Metadata từ OpenStreetMap"
+                    }
+                },
+                {
+                    "name": "6. Calculate Distance Between Stations",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/stations/distance/{{stationId1}}/{{stationId2}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stations",
+                                "distance",
+                                "{{stationId1}}",
+                                "{{stationId2}}"
+                            ]
+                        },
+                        "description": "Tính khoảng cách giữa 2 trạm.\n\n**Response DistanceResponseDto:**\n- Thông tin 2 trạm\n- Khoảng cách (km)\n- Đơn vị đo"
+                    }
+                },
+                {
+                    "name": "7. Find Nearby Stations",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/stations/nearby?longitude=106.6297&latitude=10.8231&maxDistance=5000",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stations",
+                                "nearby"
+                            ],
+                            "query": [
+                                {
+                                    "key": "longitude",
+                                    "value": "106.6297"
+                                },
+                                {
+                                    "key": "latitude",
+                                    "value": "10.8231"
+                                },
+                                {
+                                    "key": "maxDistance",
+                                    "value": "5000",
+                                    "description": "Khoảng cách tối đa (mét)"
+                                }
+                            ]
+                        },
+                        "description": "Tìm các trạm gần vị trí được chỉ định.\n\n**Sử dụng MongoDB geospatial queries.**"
+                    }
+                }
+            ],
+            "description": "Quản lý trạm xe với đầy đủ CRUD operations và geospatial features."
+        },
+        {
+            "name": "🛣️ Route Management",
+            "item": [
+                {
+                    "name": "1. Get All Routes",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data.length > 0) {",
+                                    "        var firstRoute = jsonData.data[0];",
+                                    "        pm.environment.set('routeId1', firstRoute._id);",
+                                    "        console.log('✅ Got routes list');",
+                                    "        console.log('🛣️ First route: ' + firstRoute.name);",
+                                    "        console.log('🆔 Route ID saved: ' + firstRoute._id);",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Failed to get routes');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/routes?page=1&limit=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "routes"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ]
+                        },
+                        "description": "Lấy danh sách tất cả tuyến đường.\n\n**Response RouteResponseDto bao gồm:**\n- Thông tin trạm khởi hành/đến\n- Khoảng cách và thời gian\n- Giá vé\n- Giờ hoạt động"
+                    }
+                },
+                {
+                    "name": "2. Create New Route",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data._id) {",
+                                    "        pm.environment.set('newRouteId', jsonData.data._id);",
+                                    "        console.log('✅ Route created successfully');",
+                                    "        console.log('🛣️ Route: ' + jsonData.data.name);",
+                                    "        console.log('🆔 ID: ' + jsonData.data._id);",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Failed to create route');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Test Route - Manual\",\n  \"description\": \"Tuyến test được tạo thủ công\",\n  \"stationIds\": [\"{{stationId1}}\", \"{{stationId2}}\"],\n  \"distance\": 180,\n  \"etd\": \"08:00\",\n  \"estimatedDuration\": 240,\n  \"basePrice\": 80000,\n  \"pricePerKm\": 1500,\n  \"operatingHours\": {\n    \"start\": \"05:00\",\n    \"end\": \"22:00\"\n  },\n  \"operatingDays\": [\"monday\", \"tuesday\", \"wednesday\", \"thursday\", \"friday\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/routes",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "routes"
+                            ]
+                        },
+                        "description": "Tạo tuyến đường mới thủ công.\n\n**Yêu cầu quyền:** ADMIN hoặc SELLER\n\n**Fields bắt buộc:**\n- `stationIds`: Mảng ID trạm (ít nhất 2 trạm)\n- `distance`: Khoảng cách (km)\n- `etd`: Giờ xuất phát tham chiếu (HH:mm)\n- `estimatedDuration`: Thời gian di chuyển (phút)"
+                    }
+                },
+                {
+                    "name": "3. Auto Calculate Route",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"name\": \"Test Route - Auto Calculate\",\n  \"description\": \"Tuyến test với tính toán tự động\",\n  \"stationIds\": [\"{{stationId1}}\", \"{{stationId2}}\"],\n  \"etd\": \"07:30\",\n  \"basePrice\": 100000,\n  \"pricePerKm\": 2000,\n  \"operatingHours\": {\n    \"start\": \"06:00\",\n    \"end\": \"23:00\"\n  },\n  \"operatingDays\": [\"monday\", \"tuesday\", \"wednesday\", \"thursday\", \"friday\", \"saturday\", \"sunday\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/routes/auto-calculate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "routes",
+                                "auto-calculate"
+                            ]
+                        },
+                        "description": "Tạo tuyến với tính toán tự động khoảng cách và thời gian từ OpenStreetMap.\n\n**Hệ thống sẽ tự động:**\n- Tính khoảng cách thực tế\n- Ước tính thời gian di chuyển\n- Lấy thông tin route từ OSM\n\n**Yêu cầu:**\n- `stationIds`: Mảng trạm theo thứ tự hành trình\n- `etd`: Giờ tham chiếu (HH:mm)"
+                    }
+                },
+                {
+                    "name": "4. Get Routes by Stations",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/routes/by-stations?origin={{stationId1}}&destination={{stationId2}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "routes",
+                                "by-stations"
+                            ],
+                            "query": [
+                                {
+                                    "key": "origin",
+                                    "value": "{{stationId1}}"
+                                },
+                                {
+                                    "key": "destination",
+                                    "value": "{{stationId2}}"
+                                }
+                            ]
+                        },
+                        "description": "Tìm tuyến đường giữa 2 trạm cụ thể."
+                    }
+                },
+                {
+                    "name": "5. Recalculate Route Distance",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/routes/{{routeId1}}/recalculate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "routes",
+                                "{{routeId1}}",
+                                "recalculate"
+                            ]
+                        },
+                        "description": "Tính lại khoảng cách và thời gian cho tuyến đường từ OpenStreetMap.\n\n**Hệ thống sẽ tự động:**\n- Cập nhật khoảng cách thực tế\n- Tính lại thời gian di chuyển\n- Lấy thông tin route mới từ OSM"
+                    }
+                }
+            ],
+            "description": "Quản lý tuyến đường với auto-calculation từ OpenStreetMap."
+        },
+        {
+            "name": "🚌 Bus Management",
+            "item": [
+                {
+                    "name": "1. Get All Buses",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data.length > 0) {",
+                                    "        var firstBus = jsonData.data[0];",
+                                    "        pm.environment.set('busId1', firstBus._id);",
+                                    "        console.log('✅ Got buses list');",
+                                    "        console.log('🚌 First bus: ' + firstBus.licensePlate);",
+                                    "        console.log('🆔 Bus ID saved: ' + firstBus._id);",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Failed to get buses');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/buses?page=1&limit=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "buses"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ]
+                        },
+                        "description": "Lấy danh sách tất cả xe khách.\n\n**Response bao gồm:**\n- Biển số xe\n- Loại xe (ghế ngồi/giường nằm)\n- Số ghế\n- Trạng thái"
+                    }
+                },
+                {
+                    "name": "2. Create New Bus",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data._id) {",
+                                    "        pm.environment.set('busId1', jsonData.data._id);",
+                                    "        console.log('✅ Bus created successfully');",
+                                    "        console.log('🚌 Bus: ' + jsonData.data.licensePlate);",
+                                    "        console.log('🆔 ID: ' + jsonData.data._id);",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Failed to create bus');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"busNo\": \"BUS-TEST01\",\n  \"plateNo\": \"51B-TEST01\",\n  \"type\": \"SLEEPER\",\n  \"vacancy\": 28,\n  \"driverName\": \"Nguyễn Văn Tài Xế\",\n  \"status\": \"AVAILABLE\",\n  \"images\": []\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/buses",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "buses"
+                            ]
+                        },
+                        "description": "Tạo xe khách mới.\n\n**Bus Types:**\n- `standard`: Ghế ngồi thường\n- `sleeper`: Giường nằm\n- `limousine`: Limousine cao cấp\n\n**Hệ thống sẽ tự động tạo ghế cho xe.**"
+                    }
+                },
+                {
+                    "name": "3. Get Bus Details",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/buses/{{busId1}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "buses",
+                                "{{busId1}}"
+                            ]
+                        },
+                        "description": "Lấy thông tin chi tiết xe khách."
+                    }
+                },
+                {
+                    "name": "4. Update Bus Status",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"status\": \"MAINTENANCE\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/buses/{{busId1}}/status",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "buses",
+                                "{{busId1}}",
+                                "status"
+                            ]
+                        },
+                        "description": "Cập nhật trạng thái xe khách.\n\n**Status options:**\n- `AVAILABLE`: Xe sẵn sàng\n- `MAINTENANCE`: Đang bảo trì\n- `OUT_OF_SERVICE`: Ngừng hoạt động"
+                    }
+                },
+                {
+                    "name": "5. Import Buses from Excel",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": []
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/buses/import",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "buses",
+                                "import"
+                            ]
+                        },
+                        "description": "Import danh sách xe khách từ file Excel.\n\n**Format Excel cần:**\n- Biển số xe\n- Loại xe (STANDARD/SLEEPER/LIMOUSINE)\n- Số ghế\n- Tài xế\n- Trạng thái"
+                    }
+                }
+            ],
+            "description": "Quản lý đội xe khách với nhiều loại xe khác nhau."
+        },
+        {
+            "name": "📅 Scheduling Management",
+            "item": [
+                {
+                    "name": "1. Get All Schedules",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data.length > 0) {",
+                                    "        var firstSchedule = jsonData.data[0];",
+                                    "        pm.environment.set('scheduleId1', firstSchedule._id);",
+                                    "        console.log('✅ Got schedules list');",
+                                    "        console.log('📅 First schedule ID: ' + firstSchedule._id);",
+                                    "        console.log('🕐 Departure: ' + firstSchedule.etd);",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Failed to get schedules');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/scheduling?page=1&limit=10",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scheduling"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                }
+                            ]
+                        },
+                        "description": "Lấy danh sách tất cả lịch trình.\n\n**Response SchedulingResponseDto bao gồm:**\n- Thông tin tuyến đường\n- Thông tin xe và tài xế\n- Số ghế available/booked\n- Trạng thái lịch trình"
+                    }
+                },
+                {
+                    "name": "2. Create New Schedule",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 201) {",
+                                    "    var jsonData = pm.response.json();",
+                                    "    if (jsonData.data && jsonData.data._id) {",
+                                    "        pm.environment.set('newScheduleId', jsonData.data._id);",
+                                    "        console.log('✅ Schedule created successfully');",
+                                    "        console.log('📅 Schedule ID: ' + jsonData.data._id);",
+                                    "        console.log('🕐 Departure: ' + jsonData.data.etd);",
+                                    "    }",
+                                    "} else {",
+                                    "    console.log('❌ Failed to create schedule');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"routeId\": \"{{routeId1}}\",\n  \"busIds\": [\"{{busId1}}\"],\n  \"etd\": \"08:00\",\n  \"departureDate\": \"2025-12-25\",\n  \"eta\": \"12:00\",\n  \"arrivalDate\": \"2025-12-25\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/scheduling",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scheduling"
+                            ]
+                        },
+                        "description": "Tạo lịch trình mới.\n\n**Yêu cầu quyền:** ADMIN hoặc SELLER\n\n**Hệ thống sẽ tự động:**\n- Tính số ghế available từ xe\n- Set trạng thái scheduled\n- Validate business logic"
+                    }
+                },
+                {
+                    "name": "3. Get Available Schedules",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/scheduling/available?routeId={{routeId1}}&date=2025-12-25",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scheduling",
+                                "available"
+                            ],
+                            "query": [
+                                {
+                                    "key": "routeId",
+                                    "value": "{{routeId1}}"
+                                },
+                                {
+                                    "key": "date",
+                                    "value": "2025-12-25"
+                                }
+                            ]
+                        },
+                        "description": "Tìm lịch trình còn chỗ theo tiêu chí.\n\n**Filters:**\n- `departureDate`: Ngày khởi hành\n- `departureStationId`: Trạm đi\n- `arrivalStationId`: Trạm đến\n- `minPrice/maxPrice`: Khoảng giá"
+                    }
+                },
+                {
+                    "name": "4. Get Schedules by Route",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/scheduling/by-route/{{routeId1}}?page=1&limit=5",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scheduling",
+                                "by-route",
+                                "{{routeId1}}"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "5"
+                                }
+                            ]
+                        },
+                        "description": "Lấy tất cả lịch trình của 1 tuyến đường."
+                    }
+                }
+            ],
+            "description": "Quản lý lịch trình xe với thông tin tài xế và ghế."
+        },
+        {
+            "name": "📊 Excel Import/Export",
+            "item": [
+                {
+                    "name": "1. Download Excel Template",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/scheduling/export/template",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scheduling",
+                                "export",
+                                "template"
+                            ]
+                        },
+                        "description": "Tải template Excel để import lịch trình.\n\n**Response:**\n- File Excel (.xlsx) với format chuẩn\n- Dữ liệu mẫu thực tế\n- Hướng dẫn sử dụng trong file\n\n**Columns:**\n- Tên tuyến đường\n- Biển số xe  \n- Ngày khởi hành\n- Giờ khởi hành\n- Giờ đến\n- Giá vé\n- Tên tài xế\n- SĐT tài xế\n- GPLX\n- Ghi chú\n\n**Yêu cầu quyền:** ADMIN hoặc SELLER"
+                    }
+                },
+                {
+                    "name": "2. Validate Excel Data",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Validate Excel request success', function () {",
+                                    "    pm.expect(pm.response.code).to.eql(200);",
+                                    "});",
+                                    "",
+                                    "const jsonData = pm.response.json();",
+                                    "pm.environment.set('excelIsValid', jsonData.isValid);",
+                                    "pm.environment.set('excelFirstRoute', jsonData.preview?.[0]?.routeName || '');",
+                                    "",
+                                    "pm.test('Excel file parsed', function () {",
+                                    "    pm.expect(Array.isArray(jsonData.preview)).to.be.true;",
+                                    "});",
+                                    "",
+                                    "if (!jsonData.isValid && jsonData.errors?.length) {",
+                                    "    console.warn('❌ Excel validation errors:', jsonData.errors);",
+                                    "} else {",
+                                    "    console.log('✅ Excel validation completed, ready to import');",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "uploads/templates/lich_trinh_import_template.xlsx",
+                                    "description": "Excel file to validate. Use the template downloaded from step 1."
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/scheduling/import/validate",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scheduling",
+                                "import",
+                                "validate"
+                            ]
+                        },
+                        "description": "Validate Excel file trước khi import thực sự.\n\n**Features:**\n- ✅ Kiểm tra format dữ liệu\n- ✅ Validate business rules\n- ✅ Check tuyến/xe tồn tại\n- ✅ Preview dữ liệu\n- ✅ Detailed error reports\n\n**Response:**\n- `isValid`: Boolean validation result\n- `errors`: Array of error messages\n- `preview`: First 5 rows for review\n\n**Yêu cầu quyền:** ADMIN hoặc SELLER"
+                    }
+                },
+                {
+                    "name": "3. Import from Excel",
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "pm.test('Excel import accepted', function () {",
+                                    "    pm.expect([200, 201]).to.include(pm.response.code);",
+                                    "});",
+                                    "",
+                                    "const jsonData = pm.response.json();",
+                                    "pm.environment.set('importSuccessCount', jsonData.successCount || 0);",
+                                    "",
+                                    "if (jsonData.createdSchedules && jsonData.createdSchedules.length > 0) {",
+                                    "    pm.environment.set('importedScheduleId', jsonData.createdSchedules[0]._id || '');",
+                                    "    pm.environment.set('routeId1', jsonData.createdSchedules[0].routeId || pm.environment.get('routeId1') || '');",
+                                    "    console.log('✅ Created schedules:', jsonData.createdSchedules.length);",
+                                    "}",
+                                    "",
+                                    "pm.test('At least one schedule created from Excel', function () {",
+                                    "    pm.expect(jsonData.successCount || 0).to.be.above(0);",
+                                    "});",
+                                    "",
+                                    "if (jsonData.errors && jsonData.errors.length > 0) {",
+                                    "    console.warn('❌ Import errors:', jsonData.errors);",
+                                    "}",
+                                    "if (jsonData.warnings && jsonData.warnings.length > 0) {",
+                                    "    console.warn('⚠️ Warnings:', jsonData.warnings);",
+                                    "}"
+                                ],
+                                "type": "text/javascript"
+                            }
+                        }
+                    ],
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "formdata",
+                            "formdata": [
+                                {
+                                    "key": "file",
+                                    "type": "file",
+                                    "src": "uploads/templates/lich_trinh_import_template.xlsx",
+                                    "description": "Excel file with scheduling data. Use validated template from step 2."
+                                }
+                            ]
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/scheduling/import/excel",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scheduling",
+                                "import",
+                                "excel"
+                            ]
+                        },
+                        "description": "Import lịch trình từ file Excel đã validate.\n\n**Features:**\n- 🚀 Bulk import scheduling data\n- 🔍 Smart route/bus lookup\n- 🛡️ Duplicate detection\n- 📞 Phone number validation\n- 🕐 Auto arrival time calculation\n- 📊 Comprehensive reporting\n\n**Process:**\n1. Parse Excel file\n2. Validate each row\n3. Check route/bus existence\n4. Create scheduling entries\n5. Generate detailed report\n\n**Response ExcelImportResultDto:**\n- `totalRows`: Total processed\n- `successCount`: Successfully created\n- `errorCount`: Failed rows\n- `createdSchedules`: Array of created entries\n- `errors`: Detailed error list\n- `warnings`: Non-blocking issues\n\n**Yêu cầu quyền:** ADMIN hoặc SELLER"
+                    }
+                }
+            ],
+            "description": "Tính năng import/export Excel cho lịch trình với validation và error handling toàn diện."
+        },
+        {
+            "name": "💺 Seat Management",
+            "item": [
+                {
+                    "name": "1. Get Bus Seats",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/seats/bus/{{busId1}}",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "seats",
+                                "bus",
+                                "{{busId1}}"
+                            ]
+                        },
+                        "description": "Lấy danh sách tất cả ghế của 1 xe.\n\n**Response bao gồm:**\n- Số ghế\n- Vị trí (floor, row, column)\n- Trạng thái (available/booked/blocked)"
+                    }
+                },
+                {
+                    "name": "2. Create Seats for Bus",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"seatNo\": \"A01\",\n  \"busId\": \"{{busId1}}\",\n  \"status\": \"EMPTY\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/seats",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "seats"
+                            ]
+                        },
+                        "description": "Tạo ghế cho xe (auto-generated khi tạo xe mới).\n\n**Yêu cầu quyền:** ADMIN hoặc SELLER"
+                    }
+                },
+                {
+                    "name": "3. Book Seats",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{customerToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"seatNos\": [\"A01\", \"A02\"]\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/seats/{{busId1}}/seats/book",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "seats",
+                                "{{busId1}}",
+                                "seats",
+                                "book"
+                            ]
+                        },
+                        "description": "Đặt ghế cho khách hàng.\n\n**Yêu cầu quyền:** Customer phải đăng nhập\n\n**Validation:**\n- Ghế phải available\n- Thông tin hành khách đầy đủ\n- Số ghế và số hành khách phải match"
+                    }
+                },
+                {
+                    "name": "4. Update Seat Status",
+                    "request": {
+                        "method": "PATCH",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"seatNos\": [\"A01\", \"A02\"],\n  \"status\": \"BLOCKED\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/seats/{{busId1}}/seats/status",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "seats",
+                                "{{busId1}}",
+                                "seats",
+                                "status"
+                            ]
+                        },
+                        "description": "Cập nhật trạng thái ghế cho admin/seller.\n\n**Status options:**\n- `EMPTY`: Ghế trống\n- `BOOKED`: Đã đặt\n- `BLOCKED`: Bị khóa"
+                    }
+                },
+                {
+                    "name": "5. Get Seat Details",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/seats/bus/{{busId1}}/seat/A01",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "seats",
+                                "bus",
+                                "{{busId1}}",
+                                "seat",
+                                "A01"
+                            ]
+                        },
+                        "description": "Lấy thông tin chi tiết 1 ghế cụ thể."
+                    }
+                }
+            ],
+            "description": "Quản lý ghế xe và booking cho khách hàng."
+        },
+        {
+            "name": "👥 User Management",
+            "item": [
+                {
+                    "name": "1. Get My Profile",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{customerToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/users/profile",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users",
+                                "profile"
+                            ]
+                        },
+                        "description": "Lấy thông tin profile người dùng hiện tại.\n\n**Yêu cầu authentication.**"
+                    }
+                },
+                {
+                    "name": "2. Update Profile",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{customerToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"firstName\": \"Nguyễn Văn\",\n  \"lastName\": \"Updated\",\n  \"phone\": \"0909999999\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/users/profile",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users",
+                                "profile"
+                            ]
+                        },
+                        "description": "Cập nhật thông tin profile."
+                    }
+                },
+                {
+                    "name": "3. Get All Users (Admin)",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{baseUrl}}/users?page=1&limit=10&role=CUSTOMER",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "users"
+                            ],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "limit",
+                                    "value": "10"
+                                },
+                                {
+                                    "key": "role",
+                                    "value": "CUSTOMER"
+                                }
+                            ]
+                        },
+                        "description": "Lấy danh sách tất cả users (chỉ ADMIN).\n\n**Filters:**\n- `role`: ADMIN/SELLER/CUSTOMER\n- `status`: ACTIVE/INACTIVE\n- `search`: Tìm theo tên/email"
+                    }
+                }
+            ],
+            "description": "Quản lý thông tin người dùng và profile."
+        },
+        {
+            "name": "🔍 Advanced Features",
+            "item": [
+                {
+                    "name": "1. Search Places (OpenStreetMap)",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/stations/search-places?q=Bến xe Miền Đông",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stations",
+                                "search-places"
+                            ],
+                            "query": [
+                                {
+                                    "key": "q",
+                                    "value": "Bến xe Miền Đông"
+                                }
+                            ]
+                        },
+                        "description": "Tìm kiếm địa điểm trên OpenStreetMap.\n\n**Response PlaceSearchResponseDto:**\n- Tên địa điểm\n- Tọa độ GPS\n- Địa chỉ chi tiết\n- Place type"
+                    }
+                },
+                {
+                    "name": "2. Find Nearby Bus Stations",
+                    "request": {
+                        "method": "GET",
+                        "header": [],
+                        "url": {
+                            "raw": "{{baseUrl}}/stations/nearby-bus-stations?longitude=106.6297&latitude=10.8231&radius=5",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "stations",
+                                "nearby-bus-stations"
+                            ],
+                            "query": [
+                                {
+                                    "key": "longitude",
+                                    "value": "106.6297"
+                                },
+                                {
+                                    "key": "latitude",
+                                    "value": "10.8231"
+                                },
+                                {
+                                    "key": "radius",
+                                    "value": "5",
+                                    "description": "Bán kính tìm kiếm (km)"
+                                }
+                            ]
+                        },
+                        "description": "Tìm các trạm xe buýt gần vị trí từ OpenStreetMap.\n\n**Useful for suggesting nearby public transport.**"
+                    }
+                },
+                {
+                    "name": "3. Bulk Create Schedules",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            },
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{adminToken}}"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n  \"routeId\": \"{{routeId1}}\",\n  \"busIds\": [\"{{busId1}}\"],\n  \"etd\": \"06:00\",\n  \"startDate\": \"2025-12-26\",\n  \"endDate\": \"2025-12-30\",\n  \"recurringDays\": [\"monday\", \"wednesday\", \"friday\"],\n  \"price\": 120000,\n  \"note\": \"Bulk schedules test\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{baseUrl}}/scheduling/bulk",
+                            "host": [
+                                "{{baseUrl}}"
+                            ],
+                            "path": [
+                                "scheduling",
+                                "bulk"
+                            ]
+                        },
+                        "description": "Tạo nhiều lịch trình cùng lúc.\n\n**Useful for creating daily/weekly schedules.**"
+                    }
+                }
+            ],
+            "description": "Các tính năng nâng cao như geolocation và bulk operations."
+        }
+    ],
+    "event": [
+        {
+            "listen": "prerequest",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "// Set base URL if not set",
+                    "if (!pm.environment.get('baseUrl')) {",
+                    "    pm.environment.set('baseUrl', 'http://localhost:9091/api/v1');",
+                    "}",
+                    "",
+                    "console.log('🚀 CheckItOut Complete Auto-Flow Collection');",
+                    "console.log('📡 Base URL: ' + pm.environment.get('baseUrl'));"
+                ]
+            }
+        },
+        {
+            "listen": "test",
+            "script": {
+                "type": "text/javascript",
+                "exec": [
+                    "// Global test scripts",
+                    "const responseTime = pm.response.responseTime;",
+                    "const statusCode = pm.response.code;",
+                    "",
+                    "// Log response info",
+                    "console.log('⏱️ Response time: ' + responseTime + 'ms');",
+                    "console.log('📊 Status code: ' + statusCode);",
+                    "",
+                    "// Check for common errors",
+                    "if (statusCode >= 400) {",
+                    "    console.log('❌ Error response received');",
+                    "    try {",
+                    "        const errorData = pm.response.json();",
+                    "        if (errorData.message) {",
+                    "            console.log('💬 Error message: ' + errorData.message);",
+                    "        }",
+                    "    } catch (e) {",
+                    "        console.log('💬 Error parsing response JSON');",
+                    "    }",
+                    "} else {",
+                    "    console.log('✅ Request successful');",
+                    "}"
+                ]
+            }
+        }
+    ],
+    "variable": [
+        {
+            "key": "baseUrl",
+            "value": "http://localhost:9091/api/v1",
+            "type": "string"
+        },
+        {
+            "key": "adminToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "customerToken",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "adminId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "customerId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "stationId1",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "stationId2",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "newStationId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "routeId1",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "newRouteId",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "busId1",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "scheduleId1",
+            "value": "",
+            "type": "string"
+        },
+        {
+            "key": "newScheduleId",
+            "value": "",
+            "type": "string"
+        }
+    ]
+}

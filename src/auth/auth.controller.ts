@@ -1,0 +1,311 @@
+import {
+  Controller,
+  Post,
+  Body,
+  Req,
+  Res,
+  HttpCode,
+  HttpStatus,
+  Get,
+  UseGuards,
+} from '@nestjs/common';
+import type { Response, Request } from 'express';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
+import { AuthGuard } from '@nestjs/passport';
+import { ConfigService } from '@nestjs/config';
+import { AuthService } from './auth.service';
+import {
+  LoginDto,
+  RegisterDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  VerifyEmailDto,
+  ChangePasswordDto,
+  CompleteRegistrationDto,
+  CompleteOAuthRegistrationDto,
+} from './dto/auth.dto';
+import { Auth } from '../common/decorators/auth.decorator';
+import { GetUser } from '../common/decorators/get-user.decorator';
+import { UserResponseDto } from '../users/dto/user.dto';
+import { UserDocument } from '../users';
+
+@ApiTags('Authentication')
+@Controller('auth')
+export class AuthController {
+  constructor(
+    private readonly authService: AuthService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  @ApiOperation({ summary: 'User login' })
+  @ApiResponse({ status: 200, description: 'Login successful' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @Throttle({ default: { limit: 5, ttl: 300000 } }) // 5 attempts per 5 minutes
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(
+    @Body() loginDto: LoginDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.login(loginDto, request);
+
+    // Set refresh token in HTTP-only cookie
+    response.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    // Don't send refresh token in response body
+    const { refreshToken, ...responseData } = result;
+    return responseData;
+  }
+
+  @ApiOperation({ summary: 'User registration' })
+  @ApiResponse({
+    status: 201,
+    description: 'Registration successful - check email for verification',
+  })
+  @ApiResponse({ status: 409, description: 'User already exists' })
+  @Throttle({ default: { limit: 3, ttl: 300000 } }) // 3 attempts per 5 minutes
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(@Body() registerDto: RegisterDto) {
+    return this.authService.register(registerDto);
+  }
+
+  @ApiOperation({
+    summary: 'Complete pre-registration (DEPRECATED - use /register instead)',
+    deprecated: true,
+    description:
+      'This endpoint is deprecated. Please use POST /auth/register with phone, email, and password to complete pre-registration.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pre-registration completed successfully - you can now login',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'User not found with this phone number',
+  })
+  @ApiResponse({ status: 400, description: 'Account already registered' })
+  @ApiResponse({ status: 409, description: 'Email already in use' })
+  @Throttle({ default: { limit: 3, ttl: 300000 } }) // 3 attempts per 5 minutes
+  @Post('complete-registration')
+  @HttpCode(HttpStatus.OK)
+  async completeRegistration(
+    @Body() completeRegistrationDto: CompleteRegistrationDto,
+  ) {
+    return this.authService.completeRegistration(completeRegistrationDto);
+  }
+
+  @ApiOperation({ summary: 'Complete OAuth registration with phone number' })
+  @ApiResponse({
+    status: 200,
+    description: 'OAuth registration completed and user logged in',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or expired OAuth completion token',
+  })
+  @ApiResponse({ status: 409, description: 'Phone number already in use' })
+  @Throttle({ default: { limit: 5, ttl: 300000 } }) // 5 attempts per 5 minutes
+  @Post('complete-oauth-registration')
+  @HttpCode(HttpStatus.OK)
+  async completeOAuthRegistration(
+    @Body() completeOAuthDto: CompleteOAuthRegistrationDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    // Complete OAuth registration with phone (and optional password)
+    const user = await this.authService.completeOAuthRegistration(
+      completeOAuthDto.token,
+      completeOAuthDto.phone,
+      completeOAuthDto.password,
+    );
+
+    // Log the user in immediately
+    const result = await this.authService.oauthLogin(user, request);
+
+    // Set refresh token in cookie
+    response.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    // Return login response (without refresh token in body)
+    const { refreshToken, ...responseData } = result;
+    return responseData;
+  }
+
+  @ApiOperation({ summary: 'Refresh access token' })
+  @ApiResponse({ status: 200, description: 'Token refreshed successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid refresh token' })
+  @Post('refresh-token')
+  @HttpCode(HttpStatus.OK)
+  async refreshToken(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const refreshToken = request.cookies?.refreshToken;
+    if (!refreshToken) {
+      response.status(401).json({ message: 'Refresh token not found' });
+      return;
+    }
+
+    const result = await this.authService.refreshToken(refreshToken);
+
+    // Update refresh token in cookie
+    response.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    // Don't send refresh token in response body
+    const { refreshToken: newRefreshToken, ...responseData } = result;
+    return responseData;
+  }
+
+  @ApiOperation({ summary: 'User logout' })
+  @ApiResponse({ status: 200, description: 'Logout successful' })
+  @Auth()
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  async logout(
+    @GetUser() user: any,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    // Clear refresh token cookie
+    response.clearCookie('refreshToken');
+
+    return this.authService.logout(user.userId);
+  }
+
+  @ApiOperation({ summary: 'Change password' })
+  @ApiResponse({ status: 200, description: 'Password updated successfully' })
+  @ApiResponse({ status: 400, description: 'Invalid current password' })
+  @Auth()
+  @Post('change-password')
+  async changePassword(
+    @GetUser() user: any,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    return this.authService.changePassword(user.userId, changePasswordDto);
+  }
+
+  @ApiOperation({ summary: 'Forgot password' })
+  @ApiResponse({ status: 200, description: 'Reset email sent if user exists' })
+  @Throttle({ default: { limit: 3, ttl: 300000 } }) // 3 attempts per 5 minutes
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  @ApiOperation({ summary: 'Reset password' })
+  @ApiResponse({ status: 200, description: 'Password reset successful' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired token' })
+  @Throttle({ default: { limit: 3, ttl: 300000 } }) // 3 attempts per 5 minutes
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(resetPasswordDto);
+  }
+
+  @ApiOperation({ summary: 'Verify email address' })
+  @ApiResponse({ status: 200, description: 'Email verified successfully' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or expired verification token',
+  })
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 requests per minute
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  async verifyEmail(@Body() verifyEmailDto: VerifyEmailDto) {
+    return this.authService.verifyEmail(verifyEmailDto);
+  }
+
+  @ApiOperation({ summary: 'Get authenticated user info' })
+  @ApiResponse({
+    status: 200,
+    description: 'Authenticated user retrieved successfully',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @Auth()
+  @Get('me')
+  async getCurrentUser(
+    @GetUser() user: any,
+  ): Promise<{ user: UserResponseDto }> {
+    const currentUser = await this.authService.getCurrentUser(user.userId);
+    return { user: currentUser };
+  }
+
+  @ApiOperation({ summary: 'Initiate Google OAuth login' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to Google OAuth consent screen',
+  })
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 attempts per minute
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  async googleAuth() {
+    // This route initiates OAuth flow
+    // Passport handles redirect automatically
+    // The guard will trigger the strategy and redirect to Google
+  }
+
+  @ApiOperation({ summary: 'Google OAuth callback' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to frontend with OAuth result',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'OAuth failed',
+  })
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 attempts per minute
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  async googleAuthCallback(@Req() request: Request, @Res() response: Response) {
+    const userOrCompletion = request.user as
+      | UserDocument
+      | { needsCompletion: true; token: string };
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL');
+
+    // Check if this is a new user needing completion
+    if (
+      'needsCompletion' in userOrCompletion &&
+      userOrCompletion.needsCompletion
+    ) {
+      // New user - redirect to frontend completion page
+      return response.redirect(
+        `${frontendUrl}/complete-registration?token=${userOrCompletion.token}`,
+      );
+    }
+
+    const user = userOrCompletion as UserDocument;
+
+    // Use the OAuth login method (returns same structure as regular login)
+    const result = await this.authService.oauthLogin(user, request);
+
+    // Set refresh token in HTTP-only cookie (same as regular login)
+    response.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    // Existing user - redirect to frontend OAuth callback with token
+    return response.redirect(
+      `${frontendUrl}/oauth-callback?token=${result.accessToken}`,
+    );
+  }
+}

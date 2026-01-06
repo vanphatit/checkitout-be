@@ -1,0 +1,1037 @@
+{
+	"info": {
+		"_postman_id": "4cbe81a1-b6f9-452c-9a17-8c484a27efd7",
+		"name": "CheckItOut - Ticket Management Auto-Flow",
+		"description": "# CheckItOut Ticket API - Complete Auto-Flow Collection\n\n🎟️ **Complete ticket booking test collection với auto-flow từ đầu đến cuối**\n\n## 🚀 **AUTO-FLOW FEATURES:**\n\n### **Cách dùng:**\n1. Import collection vào Postman\n2. Import environment file (CheckItOut-Dev.postman_environment.json)\n3. Click Run Collection → Select All → Run\n4. Tất cả variables tự động set từ API responses\n5. Zero manual work needed!\n\n### **Auto-Flow Sequence:**\n1. ✅ **Login Admin** → Set adminToken\n2. ✅ **Login Customer** → Set customerToken\n3. ✅ **Login Seller** → Set sellerToken\n4. ✅ **Get Schedule** → Set schedulingId, routeId, busId\n5. ✅ **Get Available Seats** → Set seatId\n6. ✅ **Price Preview** → Verify pricing\n7. ✅ **Create Ticket** → Set ticketId\n8. ✅ **All other APIs** work automatically\n\n## 📋 **Complete Feature Set:**\n\n### **Phase 1: Authentication**\n- Login Admin/Customer/Seller\n- Auto-token management\n\n### **Phase 2: Ticket Creation**\n- Customer creates ticket (auto-phone)\n- Admin/Seller creates ticket for customer\n- Create and Pay in one step\n- Price preview\n\n### **Phase 3: Ticket Management**\n- Get my tickets\n- Get tickets by email/phone\n- Get tickets by scheduling\n- Update ticket status\n- Transfer ticket\n- Fail ticket\n\n### **Phase 4: Analytics**\n- Revenue by scheduling\n- Dashboard summary\n- Today's revenue\n- Detailed ticket list with filters\n\n**🔥 Import → Run Collection → Complete ticket test in 3 minutes!**",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "39571017"
+	},
+	"item": [
+		{
+			"name": "🔐 Authentication",
+			"item": [
+				{
+					"name": "1. Login Admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.accessToken) {",
+									"        pm.environment.set('adminToken', jsonData.data.accessToken);",
+									"        pm.environment.set('adminId', jsonData.data.user.id);",
+									"        pm.environment.set('adminPhone', jsonData.data.user.phone);",
+									"        console.log('✅ Admin login successful');",
+									"        console.log('Token: ' + jsonData.data.accessToken.substring(0, 20) + '...');",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin1@checkitout.com\",\n  \"password\": \"Admin123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Login Customer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.accessToken) {",
+									"        pm.environment.set('customerToken', jsonData.data.accessToken);",
+									"        pm.environment.set('customerId', jsonData.data.user.id);",
+									"        pm.environment.set('customerPhone', jsonData.data.user.phone);",
+									"        pm.environment.set('customerEmail', jsonData.data.user.email);",
+									"        console.log('✅ Customer login successful');",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user1@checkitout.com\",\n  \"password\": \"User123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Login Seller",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.accessToken) {",
+									"        pm.environment.set('sellerToken', jsonData.data.accessToken);",
+									"        pm.environment.set('sellerId', jsonData.data.user.id);",
+									"        console.log('✅ Seller login successful');",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"seller1@checkitout.com\",\n  \"password\": \"Seller123!\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "📋 Setup - Get Prerequisites",
+			"item": [
+				{
+					"name": "1. Get Active Schedules",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.length > 0) {",
+									"        var schedule = jsonData.data[0];",
+									"        pm.environment.set('schedulingId', schedule._id);",
+									"        pm.environment.set('routeId', schedule.routeId);",
+									"        pm.environment.set('busId', schedule.busId);",
+									"        pm.environment.set('schedulePrice', schedule.price);",
+									"        console.log('✅ Schedule data saved');",
+									"        console.log('Schedule ID: ' + schedule._id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/scheduling?date=2026-01-06",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"scheduling"
+							],
+							"query": [
+								{
+									"key": "date",
+									"value": "2026-01-06"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Get Available Seats",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.length > 0) {",
+									"        var availableSeat = jsonData.data.find(s => s.status === 'EMPTY');",
+									"        if (availableSeat) {",
+									"            pm.environment.set('seatId', availableSeat._id);",
+									"            pm.environment.set('seatNo', availableSeat.seatNo);",
+									"            console.log('✅ Available seat found: ' + availableSeat.seatNo);",
+									"        }",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{customerToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/seats/bus/{{busId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"seats",
+								"bus",
+								"{{busId}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "🎟️ Ticket Creation",
+			"item": [
+				{
+					"name": "1. Price Preview",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{customerToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/preview/{{schedulingId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"preview",
+								"{{schedulingId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Customer Create Ticket (Auto-phone)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data._id) {",
+									"        pm.environment.set('ticketId', jsonData.data._id);",
+									"        pm.environment.set('ticketPrice', jsonData.data.totalPrice);",
+									"        console.log('✅ Ticket created: ' + jsonData.data._id);",
+									"        console.log('Total Price: ' + jsonData.data.totalPrice);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{customerToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone\": \"{{customerPhone}}\",\n  \"seatId\": \"{{seatId}}\",\n  \"schedulingId\": \"{{schedulingId}}\",\n  \"paymentMethod\": \"BANKING\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ticket",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Admin Create Ticket for Customer",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data._id) {",
+									"        pm.environment.set('adminCreatedTicketId', jsonData.data._id);",
+									"        console.log('✅ Admin created ticket: ' + jsonData.data._id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{sellerToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone\": \"0909876543\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"Customer\",\n  \"seatId\": \"{{seatId}}\",\n  \"schedulingId\": \"{{schedulingId}}\",\n  \"paymentMethod\": \"CASH\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ticket",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "4. Create and Pay (One Step)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.ticket && jsonData.payment) {",
+									"        pm.environment.set('ticketId', jsonData.ticket._id);",
+									"        pm.environment.set('paymentUrl', jsonData.payment.paymentUrl);",
+									"        pm.environment.set('transactionId', jsonData.payment.transactionId);",
+									"        console.log('✅ Ticket created and payment URL generated');",
+									"        console.log('Payment URL: ' + jsonData.payment.paymentUrl);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript",
+								"packages": {},
+								"requests": {}
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{customerToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone\": \"{{customerPhone}}\",\n  \"seatId\": \"{{seatId}}\",\n  \"schedulingId\": \"{{schedulingId}}\",\n  \"paymentMethod\": \"BANKING\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ticket/create-and-pay",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"create-and-pay"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "📖 Ticket Retrieval",
+			"item": [
+				{
+					"name": "1. Get My Tickets (Customer)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{customerToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/my-tickets",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"my-tickets"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Get My Tickets by Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{customerToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/my-tickets?status=SUCCESS",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"my-tickets"
+							],
+							"query": [
+								{
+									"key": "status",
+									"value": "SUCCESS"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Get Ticket by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{customerToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/{{ticketId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"{{ticketId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "4. Get All Tickets (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket?page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "5. Get Tickets by Email (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/by-email/{{customerEmail}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"by-email",
+								"{{customerEmail}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "6. Get Tickets by Phone (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/by-phone/{{customerPhone}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"by-phone",
+								"{{customerPhone}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "7. Get Tickets by Scheduling (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/scheduling/{{schedulingId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"scheduling",
+								"{{schedulingId}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "✏️ Ticket Management",
+			"item": [
+				{
+					"name": "1. Update Ticket Status - Confirm Payment",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"SUCCESS\",\n  \"paymentMethod\": \"BANKING\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ticket/{{ticketId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"{{ticketId}}",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Update to CASH Payment",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{sellerToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"SUCCESS\",\n  \"paymentMethod\": \"CASH\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ticket/{{ticketId}}/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"{{ticketId}}",
+								"status"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Transfer Ticket",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"newSchedulingId\": \"{{schedulingId}}\",\n  \"newSeatId\": \"{{seatId}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ticket/{{ticketId}}/transfer",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"{{ticketId}}",
+								"transfer"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "4. Fail Ticket Manually",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reason\": \"Customer requested cancellation\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ticket/{{ticketId}}/fail",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"{{ticketId}}",
+								"fail"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "5. Cancel Expired Tickets (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/cancel-expired",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"cancel-expired"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "📊 Analytics & Reports",
+			"item": [
+				{
+					"name": "1. Dashboard Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/analytics/dashboard",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"analytics",
+								"dashboard"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "2. Today's Revenue",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/analytics/today",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"analytics",
+								"today"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "3. Revenue by Scheduling",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/analytics/scheduling/{{schedulingId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"analytics",
+								"scheduling",
+								"{{schedulingId}}"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "4. Tickets List - This Month",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/analytics/tickets-list?period=thisMonth&page=1&limit=10",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"analytics",
+								"tickets-list"
+							],
+							"query": [
+								{
+									"key": "period",
+									"value": "thisMonth"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "5. Tickets List - Custom Period",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/analytics/tickets-list?period=custom&startDate=2026-01-01&endDate=2026-01-31&status=SUCCESS&page=1&limit=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"analytics",
+								"tickets-list"
+							],
+							"query": [
+								{
+									"key": "period",
+									"value": "custom"
+								},
+								{
+									"key": "startDate",
+									"value": "2026-01-01"
+								},
+								{
+									"key": "endDate",
+									"value": "2026-01-31"
+								},
+								{
+									"key": "status",
+									"value": "SUCCESS"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "6. Tickets by Payment Method",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{adminToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/ticket/analytics/tickets-list?period=allTime&paymentMethod=BANKING",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ticket",
+								"analytics",
+								"tickets-list"
+							],
+							"query": [
+								{
+									"key": "period",
+									"value": "allTime"
+								},
+								{
+									"key": "paymentMethod",
+									"value": "BANKING"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Payment",
+			"item": [
+				{
+					"name": "Pay the ticket",
+					"request": {
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{customerToken}}",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/payment/create/{{ticketId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"payment",
+								"create",
+								"{{ticketId}}"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global pre-request script",
+					"console.log('Request: ' + pm.info.requestName);"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script",
+					"pm.test('Status code is success', function () {",
+					"    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+					"});"
+				]
+			}
+		}
+	]
+}
