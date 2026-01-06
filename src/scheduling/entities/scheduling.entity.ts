@@ -113,23 +113,23 @@ export class Scheduling {
     @Prop({
         default: 0,
         min: 0,
-        max: 100
+        max: 1000  // Tăng lên 1000 để hỗ trợ nhiều xe (mỗi xe ~30-80 ghế)
     })
     @IsOptional()
     @IsNumber({}, { message: 'Số ghế còn trống phải là số' })
     @Min(0, { message: 'Số ghế còn trống không được âm' })
-    @Max(100, { message: 'Số ghế còn trống không được vượt quá 100' })
+    @Max(1000, { message: 'Số ghế còn trống không được vượt quá 1000' })
     availableSeats: number; // Số ghế còn trống
 
     @Prop({
         default: 0,
         min: 0,
-        max: 100
+        max: 1000  // Tăng lên 1000 để hỗ trợ nhiều xe
     })
     @IsOptional()
     @IsNumber({}, { message: 'Số ghế đã đặt phải là số' })
     @Min(0, { message: 'Số ghế đã đặt không được âm' })
-    @Max(100, { message: 'Số ghế đã đặt không được vượt quá 100' })
+    @Max(1000, { message: 'Số ghế đã đặt không được vượt quá 1000' })
     bookedSeats: number; // Số ghế đã đặt
 
     @Prop({

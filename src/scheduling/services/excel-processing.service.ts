@@ -1,4 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import * as XLSX from 'xlsx';
 import { plainToClass } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -7,9 +9,15 @@ import {
   ExcelImportResultDto,
   ImportSchedulingExcelDto,
 } from '../dto/excel-import.dto';
+import { Route, RouteDocument } from '../../route/entities/route.entity';
+import { Bus, BusDocument } from '../../bus/entities/bus.entity';
 
 @Injectable()
 export class ExcelProcessingService {
+  constructor(
+    @InjectModel(Route.name) private routeModel: Model<RouteDocument>,
+    @InjectModel(Bus.name) private busModel: Model<BusDocument>,
+  ) { }
   /**
    * Parse Excel file buffer to JSON data
    */
@@ -180,7 +188,15 @@ export class ExcelProcessingService {
   /**
    * Generate Excel template for download
    */
-  generateExcelTemplate(): Buffer {
+  async generateExcelTemplate(): Promise<Buffer> {
+    // Get sample data from DB
+    const routes = await this.routeModel.find({ isActive: true }).limit(2).lean();
+    const buses = await this.busModel.find({ status: 'AVAILABLE' }).limit(2).lean();
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
     const template = [
       [
         'Tên tuyến đường',
@@ -194,38 +210,59 @@ export class ExcelProcessingService {
         'GPLX',
         'Ghi chú',
       ],
-      [
-        'Sai Gon - Hong Ngu',
-        '51B-12345',
-        '2025-12-25',
-        '08:30',
-        '12:30',
-        '150000',
+    ];
+
+    // Add sample rows from real DB data
+    if (routes.length > 0 && buses.length > 0) {
+      template.push([
+        routes[0].name,
+        buses[0].plateNo,
+        tomorrowStr,
+        routes[0].etd || '08:00',
+        '', // ETA will be calculated
+        routes[0].basePrice?.toString() || '150000',
         'Nguyễn Văn A',
         '0987654321',
         'B1234567',
         'Lịch trình mẫu',
-      ],
-      [
-        'Hong Ngu - Sai Gon',
-        '51B-12346',
-        '2025-12-25',
+      ]);
+
+      if (routes[1] && buses[1]) {
+        template.push([
+          routes[1].name,
+          buses[1].plateNo,
+          tomorrowStr,
+          routes[1].etd || '14:00',
+          '',
+          routes[1].basePrice?.toString() || '200000',
+          'Trần Văn B',
+          '0987654322',
+          'B1234568',
+          '',
+        ]);
+      }
+    } else {
+      // Fallback if no data in DB
+      template.push([
+        'Ví dụ: Hà Nội - Đà Nẵng',
+        'Ví dụ: 51A-12345',
+        tomorrowStr,
+        '08:00',
         '14:00',
-        '18:00',
-        '150000',
-        'Trần Văn B',
-        '0987654322',
-        'B1234568',
-        '',
-      ],
-    ];
+        '250000',
+        'Nguyễn Văn A',
+        '0987654321',
+        'B1234567',
+        'Tải dữ liệu từ hệ thống để có template chính xác',
+      ]);
+    }
 
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(template);
 
     // Set column widths
     worksheet['!cols'] = [
-      { width: 20 }, // Tên tuyến
+      { width: 25 }, // Tên tuyến
       { width: 15 }, // Biển số
       { width: 15 }, // Ngày
       { width: 12 }, // Giờ đi
@@ -234,7 +271,7 @@ export class ExcelProcessingService {
       { width: 18 }, // Tên tài xế
       { width: 15 }, // SĐT
       { width: 12 }, // GPLX
-      { width: 20 }, // Ghi chú
+      { width: 30 }, // Ghi chú
     ];
 
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Lịch trình');

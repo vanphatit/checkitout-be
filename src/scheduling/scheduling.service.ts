@@ -7,6 +7,27 @@ import { Bus, BusDocument } from '../bus/entities/bus.entity';
 import { CreateSchedulingDto, UpdateSchedulingDto, CreateBulkSchedulingDto } from './dto/scheduling.dto';
 import { SchedulingSearchService } from './services/scheduling-search.service';
 
+export interface BusConflict {
+    busId: string;
+    plateNo: string;
+    message: string;
+}
+
+export interface CreateSchedulingResponse {
+    scheduling: Scheduling;
+    conflicts?: BusConflict[];
+    message?: string;
+}
+
+export interface BulkSchedulingResponse {
+    schedules: Scheduling[];
+    totalConflicts: number;
+    conflictDetails: Array<{
+        date: string;
+        conflicts: BusConflict[];
+    }>;
+}
+
 @Injectable()
 export class SchedulingService {
     private readonly logger = new Logger(SchedulingService.name);
@@ -19,19 +40,35 @@ export class SchedulingService {
         private schedulingSearchService: SchedulingSearchService,
     ) { }
 
-    async create(createSchedulingDto: CreateSchedulingDto): Promise<Scheduling> {
+    async create(createSchedulingDto: CreateSchedulingDto): Promise<CreateSchedulingResponse> {
         // Validate route exists
         const route = await this.routeModel.findById(createSchedulingDto.routeId).exec();
         if (!route) {
             throw new NotFoundException('Không tìm thấy tuyến đường');
         }
 
-        // Validate buses exist and are available
-        await this.validateBuses(createSchedulingDto.busIds, createSchedulingDto.departureDate, createSchedulingDto.etd);
+        // Validate buses exist and are available (pass route for duration calculation)
+        const { validBusIds, conflicts } = await this.validateBuses(
+            createSchedulingDto.busIds,
+            createSchedulingDto.departureDate,
+            createSchedulingDto.etd,
+            undefined,
+            route.estimatedDuration
+        );
+
+        // If no valid buses, throw error
+        if (validBusIds.length === 0) {
+            throw new BadRequestException(
+                `Không có xe nào khả dụng. ${conflicts.map(c => c.message).join('. ')}`
+            );
+        }
+
+        // Use only valid buses
+        const finalBusIds = validBusIds;
 
         // Calculate available seats from buses
         const buses = await this.busModel.find({
-            _id: { $in: createSchedulingDto.busIds.map(id => new Types.ObjectId(id)) }
+            _id: { $in: finalBusIds.map(id => new Types.ObjectId(id)) }
         }).exec();
 
         const totalSeats = buses.reduce((sum, bus) => {
@@ -39,7 +76,7 @@ export class SchedulingService {
             return sum + seatCount;
         }, 0);
 
-        const primaryBusId = createSchedulingDto.busIds[0];
+        const primaryBusId = finalBusIds[0];
 
         // Calculate ETA if not provided
         let eta = createSchedulingDto.eta;
@@ -65,7 +102,7 @@ export class SchedulingService {
             ...createSchedulingDto,
             routeId: new Types.ObjectId(createSchedulingDto.routeId),
             busId: primaryBusId ? new Types.ObjectId(primaryBusId) : undefined,
-            busIds: createSchedulingDto.busIds.map(id => new Types.ObjectId(id)),
+            busIds: finalBusIds.map(id => new Types.ObjectId(id)),
             departureDate: new Date(createSchedulingDto.departureDate),
             arrivalDate: arrivalDate ? new Date(arrivalDate) : undefined,
             eta,
@@ -75,6 +112,11 @@ export class SchedulingService {
         });
 
         const saved = await newScheduling.save();
+
+        // Log warnings if some buses were excluded
+        if (conflicts.length > 0) {
+            this.logger.warn(`Created scheduling with ${validBusIds.length}/${createSchedulingDto.busIds.length} buses. Conflicts: ${conflicts.map(c => c.message).join(', ')}`);
+        }
 
         // Index to Elasticsearch
         try {
@@ -87,10 +129,17 @@ export class SchedulingService {
             this.logger.error('Failed to index scheduling to Elasticsearch:', error);
         }
 
-        return saved;
+        // Return scheduling with conflicts info
+        return {
+            scheduling: saved,
+            conflicts: conflicts.length > 0 ? conflicts : undefined,
+            message: conflicts.length > 0
+                ? `Đã tạo lịch trình với ${validBusIds.length}/${createSchedulingDto.busIds.length} xe. ${conflicts.length} xe không khả dụng.`
+                : undefined
+        };
     }
 
-    async createBulk(createBulkDto: CreateBulkSchedulingDto): Promise<Scheduling[]> {
+    async createBulk(createBulkDto: CreateBulkSchedulingDto): Promise<BulkSchedulingResponse> {
         const { startDate, endDate, recurringDays, ...baseScheduling } = createBulkDto;
 
         const start = new Date(startDate);
@@ -112,19 +161,34 @@ export class SchedulingService {
             }
         }
 
-        // Create all schedules
+        // Create all schedules and collect conflicts
         const createdSchedules: Scheduling[] = [];
+        const conflictDetails: Array<{ date: string; conflicts: BusConflict[] }> = [];
+        let totalConflicts = 0;
+
         for (const scheduleDto of schedules) {
             try {
-                const schedule = await this.create(scheduleDto);
-                createdSchedules.push(schedule);
+                const result = await this.create(scheduleDto);
+                createdSchedules.push(result.scheduling);
+
+                if (result.conflicts && result.conflicts.length > 0) {
+                    conflictDetails.push({
+                        date: scheduleDto.departureDate,
+                        conflicts: result.conflicts
+                    });
+                    totalConflicts += result.conflicts.length;
+                }
             } catch (error) {
                 // Log error but continue with other schedules
                 console.error(`Failed to create schedule for ${scheduleDto.departureDate}:`, error.message);
             }
         }
 
-        return createdSchedules;
+        return {
+            schedules: createdSchedules,
+            totalConflicts,
+            conflictDetails
+        };
     }
 
     async findAll(filters?: {
@@ -212,13 +276,43 @@ export class SchedulingService {
     }
 
     async update(id: string, updateSchedulingDto: UpdateSchedulingDto): Promise<Scheduling> {
+        const existingScheduling = await this.schedulingModel.findById(id).populate('routeId').exec();
+        if (!existingScheduling) {
+            throw new NotFoundException('Không tìm thấy lịch trình');
+        }
+
+        // Get route for duration if updating bus/time
+        let estimatedDuration = existingScheduling.estimatedDuration;
+        if (updateSchedulingDto.routeId) {
+            const route = await this.routeModel.findById(updateSchedulingDto.routeId).exec();
+            if (route) {
+                estimatedDuration = route.estimatedDuration;
+            }
+        } else if ((existingScheduling.routeId as any).estimatedDuration) {
+            estimatedDuration = (existingScheduling.routeId as any).estimatedDuration;
+        }
+
         if (updateSchedulingDto.busIds && updateSchedulingDto.departureDate && updateSchedulingDto.etd) {
-            await this.validateBuses(
+            const { validBusIds, conflicts } = await this.validateBuses(
                 updateSchedulingDto.busIds,
                 updateSchedulingDto.departureDate,
                 updateSchedulingDto.etd,
-                id
+                id,
+                estimatedDuration
             );
+
+            if (validBusIds.length === 0) {
+                throw new BadRequestException(
+                    `Không có xe nào khả dụng. ${conflicts.map(c => `${c.plateNo}: ${c.message}`).join(', ')}`
+                );
+            }
+
+            // Use only valid buses
+            updateSchedulingDto.busIds = validBusIds;
+
+            if (conflicts.length > 0) {
+                this.logger.warn(`Updated scheduling with ${validBusIds.length}/${updateSchedulingDto.busIds.length} buses. Conflicts: ${conflicts.map(c => c.message).join(', ')}`);
+            }
         }
 
         const updateData: any = { ...updateSchedulingDto };
@@ -478,35 +572,174 @@ export class SchedulingService {
         return result;
     }
 
-    private async validateBuses(busIds: string[], date: string, time: string, excludeSchedulingId?: string): Promise<void> {
+    private async validateBuses(
+        busIds: string[],
+        date: string,
+        time: string,
+        excludeSchedulingId?: string,
+        newTripDuration?: number
+    ): Promise<{ validBusIds: string[], conflicts: Array<{ busId: string, plateNo: string, message: string }> }> {
+        const conflicts: Array<{ busId: string, plateNo: string, message: string }> = [];
+
         // Check if buses exist
         const buses = await this.busModel.find({
             _id: { $in: busIds.map(id => new Types.ObjectId(id)) },
-            status: { $ne: 'MAINTENANCE' }
         }).exec();
 
-        if (buses.length !== busIds.length) {
-            throw new BadRequestException('Một hoặc nhiều xe không tồn tại hoặc đang bảo trì');
+        const foundBusIds = buses.map(b => (b._id as Types.ObjectId).toString());
+        const missingBusIds = busIds.filter(id => !foundBusIds.includes(id));
+
+        // Add missing buses to conflicts
+        missingBusIds.forEach(id => {
+            conflicts.push({
+                busId: id,
+                plateNo: 'Unknown',
+                message: `Xe không tồn tại hoặc đã bị xóa`
+            });
+        });
+
+        // Check maintenance status (using string comparison since BusStatus enum values are strings)
+        const validBuses = buses.filter(b => b.status && b.status.toString() !== 'MAINTENANCE');
+        const maintenanceBuses = buses.filter(b => b.status && b.status.toString() === 'MAINTENANCE');
+
+        maintenanceBuses.forEach(b => {
+            conflicts.push({
+                busId: (b._id as Types.ObjectId).toString(),
+                plateNo: b.plateNo,
+                message: `Xe đang bảo trì`
+            });
+        });
+
+        if (validBuses.length === 0) {
+            return { validBusIds: [], conflicts };
         }
 
-        // Check if buses are available at the given time
+        if (validBuses.length === 0) {
+            return { validBusIds: [], conflicts };
+        }
+
+        // Check if buses are available at the given time (check for time overlaps)
+        const departureDate = new Date(date);
+        departureDate.setHours(0, 0, 0, 0);
+
+        const nextDate = new Date(departureDate);
+        nextDate.setDate(nextDate.getDate() + 1);
+
+        const previousDate = new Date(departureDate);
+        previousDate.setDate(previousDate.getDate() - 1);
+
+        console.log('📅 Date validation:', {
+            inputDate: date,
+            departureDate: departureDate.toISOString(),
+            nextDate: nextDate.toISOString(),
+            previousDate: previousDate.toISOString()
+        });
+
+        // Find all schedulings that could potentially overlap
         const conflictQuery: any = {
-            busIds: { $in: busIds.map(id => new Types.ObjectId(id)) },
-            departureDate: new Date(date),
+            busIds: { $in: validBuses.map(b => b._id) },
             status: { $nin: ['cancelled', 'completed'] },
             isDeleted: false,
-            isActive: true
+            isActive: true,
+            $or: [
+                {
+                    departureDate: { $gte: departureDate, $lt: nextDate }
+                },
+                {
+                    departureDate: { $gte: previousDate, $lt: departureDate },
+                    arrivalDate: { $gte: departureDate }
+                }
+            ]
         };
 
         if (excludeSchedulingId) {
             conflictQuery._id = { $ne: new Types.ObjectId(excludeSchedulingId) };
         }
 
-        const conflictingSchedules = await this.schedulingModel.find(conflictQuery).exec();
+        const conflictingSchedules = await this.schedulingModel
+            .find(conflictQuery)
+            .populate('routeId', 'name estimatedDuration')
+            .exec();
+
+        console.log('🔍 Validation check:', {
+            busIds: validBuses.map(b => (b._id as Types.ObjectId).toString()),
+            date,
+            time,
+            foundConflicts: conflictingSchedules.length
+        });
+
+        // Track which buses have conflicts
+        const busesWithConflicts = new Set<string>();
 
         if (conflictingSchedules.length > 0) {
-            throw new BadRequestException('Một hoặc nhiều xe đã được lập lịch cho thời gian này');
+            const newStartMinutes = this.timeToMinutes(time);
+            const newEndMinutes = newStartMinutes + (newTripDuration || 0);
+
+            for (const schedule of conflictingSchedules) {
+                const existingStartMinutes = this.timeToMinutes(schedule.etd);
+                const existingEndMinutes = schedule.eta
+                    ? this.timeToMinutes(schedule.eta)
+                    : existingStartMinutes + ((schedule as any).routeId?.estimatedDuration || schedule.estimatedDuration || 0);
+
+                const scheduleDateStr = schedule.departureDate.toISOString().split('T')[0];
+                const inputDateStr = new Date(date).toISOString().split('T')[0];
+                const isSameDate = scheduleDateStr === inputDateStr;
+
+                if (isSameDate) {
+                    const overlaps = (newStartMinutes < existingEndMinutes) && (existingStartMinutes < newEndMinutes);
+
+                    if (overlaps) {
+                        // Find which bus(es) from our list are in this conflicting schedule
+                        for (const bus of validBuses) {
+                            const busIdStr = (bus._id as Types.ObjectId).toString();
+                            if (schedule.busIds.some(id => id.toString() === busIdStr)) {
+                                busesWithConflicts.add(busIdStr);
+                                conflicts.push({
+                                    busId: busIdStr,
+                                    plateNo: bus.plateNo,
+                                    message: `Đã có lịch trình từ ${schedule.etd} đến ${schedule.eta || 'không xác định'}`
+                                });
+                            }
+                        }
+                    }
+                } else {
+                    // Previous day trip check
+                    if (schedule.arrivalDate) {
+                        const arrivalDateStr = schedule.arrivalDate instanceof Date
+                            ? schedule.arrivalDate.toISOString().split('T')[0]
+                            : new Date(schedule.arrivalDate).toISOString().split('T')[0];
+                        const inputDateStr = new Date(date).toISOString().split('T')[0];
+
+                        if (arrivalDateStr === inputDateStr && newStartMinutes < existingEndMinutes) {
+                            for (const bus of validBuses) {
+                                const busIdStr = (bus._id as Types.ObjectId).toString();
+                                if (schedule.busIds.some(id => id.toString() === busIdStr)) {
+                                    busesWithConflicts.add(busIdStr);
+                                    conflicts.push({
+                                        busId: busIdStr,
+                                        plateNo: bus.plateNo,
+                                        message: `Vẫn trong chuyến đi từ ngày hôm trước (kết thúc ${schedule.eta})`
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
+
+        // Return only buses without conflicts
+        const validBusIds = validBuses
+            .filter(b => !busesWithConflicts.has((b._id as Types.ObjectId).toString()))
+            .map(b => (b._id as Types.ObjectId).toString());
+
+        console.log('✅ Validation result:', {
+            totalBuses: busIds.length,
+            validBuses: validBusIds.length,
+            conflicts: conflicts.length
+        });
+
+        return { validBusIds, conflicts };
     }
 
     private timeToMinutes(time: string): number {

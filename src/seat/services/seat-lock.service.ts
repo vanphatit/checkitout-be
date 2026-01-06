@@ -217,6 +217,28 @@ export class SeatLockService {
     }
 
     /**
+     * Get all seats with full lock info locked by a specific client
+     */
+    async getClientLocksWithScheduling(clientId: string): Promise<Array<{ schedulingId: string, seatId: string }>> {
+        try {
+            const clientKey = this.getClientSeatsKey(clientId);
+            const lockKeys = await this.redis.smembers(clientKey);
+
+            return lockKeys.map(key => {
+                // key format: seat:lock:{schedulingId}:{seatId}
+                const parts = key.replace(this.LOCK_PREFIX, '').split(':');
+                return {
+                    schedulingId: parts[0],
+                    seatId: parts[1]
+                };
+            });
+        } catch (error) {
+            this.logger.error(`Error getting client locks: ${error.message}`);
+            return [];
+        }
+    }
+
+    /**
      * Check if a seat is locked
      */
     async isSeatLocked(schedulingId: string, seatId: string): Promise<boolean> {
