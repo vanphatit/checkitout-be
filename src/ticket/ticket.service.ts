@@ -238,10 +238,17 @@ export class TicketService {
       scheduling.busId.toString(),
     );
 
-    // 6. Find applicable promotion
-    const promotion = await this.promotionService.findApplicablePromotion(
-      scheduling.departureDate,
-    );
+    // 6. Find applicable promotion (by code if provided, otherwise by date)
+    let promotion;
+    if (dto.promotionCode) {
+      // Use the provided promotion code
+      promotion = await this.promotionService.findByCode(dto.promotionCode);
+    } else {
+      // Use the current logic to find promotion by date
+      promotion = await this.promotionService.findApplicablePromotion(
+        scheduling.departureDate,
+      );
+    }
 
     // 7. Calculate final price
     const totalPrice = this.promotionService.calculateFinalPrice(
@@ -1444,8 +1451,10 @@ export class TicketService {
     const route = ticket.schedulingId.routeId;
     const stations = route.stationIds || [];
     const departureStation = stations[0] || { name: 'N/A', address: 'N/A' };
-    const arrivalStation =
-      stations[stations.length - 1] || { name: 'N/A', address: 'N/A' };
+    const arrivalStation = stations[stations.length - 1] || {
+      name: 'N/A',
+      address: 'N/A',
+    };
     const departureDate = new Date(ticket.schedulingId.departureDate);
 
     return new Promise((resolve, reject) => {
@@ -1484,11 +1493,7 @@ export class TicketService {
           .moveDown(1);
 
         // Horizontal line
-        doc
-          .moveTo(50, doc.y)
-          .lineTo(545, doc.y)
-          .stroke()
-          .moveDown(1);
+        doc.moveTo(50, doc.y).lineTo(545, doc.y).stroke().moveDown(1);
 
         // Route Information
         doc
@@ -1517,9 +1522,7 @@ export class TicketService {
         doc
           .fontSize(12)
           .font('Helvetica-Bold')
-          .text(
-            `Ngay khoi hanh: ${departureDate.toLocaleDateString('vi-VN')}`,
-          )
+          .text(`Ngay khoi hanh: ${departureDate.toLocaleDateString('vi-VN')}`)
           .moveDown(0.3);
 
         doc
@@ -1540,9 +1543,7 @@ export class TicketService {
         doc
           .fontSize(12)
           .font('Helvetica')
-          .text(
-            `Ho ten: ${ticket.userId.firstName} ${ticket.userId.lastName}`,
-          )
+          .text(`Ho ten: ${ticket.userId.firstName} ${ticket.userId.lastName}`)
           .text(`So dien thoai: ${ticket.userId.phone}`)
           .text(`So ghe: ${ticket.seatId.seatNo}`)
           .moveDown(1);

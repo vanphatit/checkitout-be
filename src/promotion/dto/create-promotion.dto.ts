@@ -15,7 +15,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PromotionType } from '../enums/promotion-type.enum';
 
 export class CreatePromotionDto {
-  @ApiProperty({ example: 'Lunar New Year Discount' })
+  @ApiProperty({
+    example: 'Giáng sinh vui vẻ',
+    description:
+      'Promotion name. The code field will be auto-generated (e.g., "Giáng sinh vui vẻ" → "GIANG_SINH_VUI_VE")',
+  })
   @IsString()
   @IsNotEmpty()
   name: string;
