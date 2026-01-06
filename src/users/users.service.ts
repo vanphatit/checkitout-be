@@ -639,4 +639,20 @@ export class UsersService {
 
     return updatedUser;
   }
+
+  async getUserStats() {
+    const [total, activeCount, pendingCount, sellerCount] = await Promise.all([
+      this.userModel.countDocuments().exec(),
+      this.userModel.countDocuments({ status: UserStatus.ACTIVE }).exec(),
+      this.userModel.countDocuments({ status: UserStatus.PENDING }).exec(),
+      this.userModel.countDocuments({ role: UserRole.SELLER }).exec(),
+    ]);
+
+    return {
+      total,
+      activeCount,
+      pendingCount,
+      sellerCount,
+    };
+  }
 }

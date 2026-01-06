@@ -419,6 +419,40 @@ export class TicketController {
   // ANALYTICS ENDPOINTS - Add to TicketController class
   // ============================================
 
+  @Get('seller/stats')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SELLER)
+  @ApiOperation({
+    summary: 'Get seller ticket statistics (Seller only)',
+    description:
+      'Get total income, ticket count by status, and average ticket price for successful tickets',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Seller ticket statistics',
+    schema: {
+      type: 'object',
+      properties: {
+        totalIncome: { type: 'number', example: 15750000 },
+        ticketCount: { type: 'number', example: 95 },
+        averagePrice: { type: 'number', example: 225000 },
+        ticketsByStatus: {
+          type: 'object',
+          properties: {
+            pending: { type: 'number', example: 10 },
+            success: { type: 'number', example: 70 },
+            failed: { type: 'number', example: 12 },
+            transfer: { type: 'number', example: 3 },
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  async getSellerStats() {
+    return this.ticketService.getSellerTicketStats();
+  }
+
   @Get('analytics/scheduling/:schedulingId')
   @UseGuards(RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.SELLER)
