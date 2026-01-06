@@ -6,6 +6,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import * as QRCode from 'qrcode';
+import PDFDocument from 'pdfkit';
 import {
   Ticket,
   TicketDocument,
@@ -30,6 +31,7 @@ import { TransferTicketDto } from './dto/transfer-ticket.dto';
 import { TicketQueryDto } from './dto/ticket-query.dto';
 import { PaginatedResult } from '../common/dto/pagination.dto';
 import { SeatStatus } from '../seat/enums/seat-status.enum';
+import { PaymentMethod } from './enums/payment-method.enum';
 import { VNPayService } from '../vnpay/vnpay.service';
 import { Seat } from '../seat/entities/seat.entity';
 import { Promotion } from '../promotion/entities/promotion.entity';
@@ -248,7 +250,7 @@ export class TicketService {
     );
 
     // 8. Set default paymentMethod if missing
-    const paymentMethod = dto.paymentMethod ?? 'BANKING';
+    const paymentMethod = dto.paymentMethod ?? PaymentMethod.BANKING;
 
     // 9. Create ticket
     const ticket = new this.ticketModel({
@@ -1394,5 +1396,210 @@ export class TicketService {
     } catch (error) {
       throw new BadRequestException('Failed to generate QR code');
     }
+  }
+
+  // ============================================
+  // GENERATE PDF TICKET
+  // ============================================
+  async generateTicketPDF(ticketId: string): Promise<Buffer> {
+    // Get ticket with full populated data
+    const ticketDoc = await this.ticketModel
+      .findById(ticketId)
+      .populate('userId', 'firstName lastName phone email')
+      .populate('seatId', 'seatNo')
+      .populate({
+        path: 'schedulingId',
+        populate: [
+          {
+            path: 'routeId',
+            select: 'name stationIds',
+            populate: {
+              path: 'stationIds',
+              select: 'name address',
+            },
+          },
+          { path: 'busId', select: 'licensePlate' },
+        ],
+      })
+      .populate('promotionId', 'name value type')
+      .exec();
+
+    if (!ticketDoc) {
+      throw new NotFoundException('Ticket not found');
+    }
+
+    const ticket = ticketDoc as unknown as TicketPopulated & {
+      schedulingId: SchedulingDocument & {
+        routeId: RouteDocument & {
+          stationIds: any[];
+        };
+        busId: any;
+      };
+    };
+
+    // Generate QR code for the ticket
+    const qrBuffer = await this.generateQRCode(ticketId);
+
+    // Get route info from stationIds array
+    const route = ticket.schedulingId.routeId;
+    const stations = route.stationIds || [];
+    const departureStation = stations[0] || { name: 'N/A', address: 'N/A' };
+    const arrivalStation =
+      stations[stations.length - 1] || { name: 'N/A', address: 'N/A' };
+    const departureDate = new Date(ticket.schedulingId.departureDate);
+
+    return new Promise((resolve, reject) => {
+      try {
+        const doc = new PDFDocument({ size: 'A4', margin: 50 });
+        const buffers: Buffer[] = [];
+
+        doc.on('data', buffers.push.bind(buffers));
+        doc.on('end', () => {
+          const pdfBuffer = Buffer.concat(buffers);
+          resolve(pdfBuffer);
+        });
+        doc.on('error', reject);
+
+        // Header
+        doc
+          .fontSize(24)
+          .font('Helvetica-Bold')
+          .text('VE XE KHACH', { align: 'center' })
+          .moveDown(0.5);
+
+        doc
+          .fontSize(14)
+          .font('Helvetica')
+          .text('CHECK!T OUT', { align: 'center' })
+          .moveDown(1);
+
+        // Ticket ID & Status
+        doc
+          .fontSize(10)
+          .text(`Ma ve: ${String(ticket._id)}`, { align: 'center' })
+          .text(
+            `Trang thai: ${ticket.status === 'SUCCESS' ? 'Da thanh toan' : ticket.status}`,
+            { align: 'center' },
+          )
+          .moveDown(1);
+
+        // Horizontal line
+        doc
+          .moveTo(50, doc.y)
+          .lineTo(545, doc.y)
+          .stroke()
+          .moveDown(1);
+
+        // Route Information
+        doc
+          .fontSize(16)
+          .font('Helvetica-Bold')
+          .text('THONG TIN CHUYEN DI', { underline: true })
+          .moveDown(0.5);
+
+        doc
+          .fontSize(12)
+          .font('Helvetica')
+          .text(`Tuyen: ${departureStation.name} -> ${arrivalStation.name}`)
+          .moveDown(0.3);
+
+        doc
+          .fontSize(10)
+          .text(`Diem di: ${departureStation.name}`)
+          .text(`Dia chi: ${departureStation.address || 'N/A'}`)
+          .moveDown(0.3);
+
+        doc
+          .text(`Diem den: ${arrivalStation.name}`)
+          .text(`Dia chi: ${arrivalStation.address || 'N/A'}`)
+          .moveDown(0.5);
+
+        doc
+          .fontSize(12)
+          .font('Helvetica-Bold')
+          .text(
+            `Ngay khoi hanh: ${departureDate.toLocaleDateString('vi-VN')}`,
+          )
+          .moveDown(0.3);
+
+        doc
+          .fontSize(11)
+          .font('Helvetica')
+          .text(`Gio xuat ben: ${ticket.schedulingId.etd}`)
+          .text(`Gio den du kien: ${ticket.schedulingId.eta}`)
+          .text(`Bien so xe: ${ticket.schedulingId.busId.licensePlate}`)
+          .moveDown(1);
+
+        // Passenger Information
+        doc
+          .fontSize(16)
+          .font('Helvetica-Bold')
+          .text('THONG TIN HANH KHACH', { underline: true })
+          .moveDown(0.5);
+
+        doc
+          .fontSize(12)
+          .font('Helvetica')
+          .text(
+            `Ho ten: ${ticket.userId.firstName} ${ticket.userId.lastName}`,
+          )
+          .text(`So dien thoai: ${ticket.userId.phone}`)
+          .text(`So ghe: ${ticket.seatId.seatNo}`)
+          .moveDown(1);
+
+        // Payment Information
+        doc
+          .fontSize(16)
+          .font('Helvetica-Bold')
+          .text('THONG TIN THANH TOAN', { underline: true })
+          .moveDown(0.5);
+
+        doc
+          .fontSize(12)
+          .font('Helvetica')
+          .text(`Gia ve: ${ticket.totalPrice.toLocaleString('vi-VN')} VND`)
+          .text(
+            `Phuong thuc: ${ticket.paymentMethod === 'BANKING' ? 'Chuyen khoan' : 'Tien mat'}`,
+          );
+
+        if (ticket.promotionId) {
+          doc.text(`Khuyen mai: ${ticket.promotionId.name}`);
+        }
+
+        doc.moveDown(1);
+
+        // QR Code
+        doc
+          .fontSize(14)
+          .font('Helvetica-Bold')
+          .text('MA QR VE', { align: 'center' })
+          .moveDown(0.5);
+
+        // Add QR code image
+        const qrX = (doc.page.width - 200) / 2;
+        doc.image(qrBuffer, qrX, doc.y, { width: 200 });
+        doc.moveDown(10);
+
+        // Footer
+        doc
+          .fontSize(9)
+          .font('Helvetica')
+          .text('Vui long xuat trinh ve nay khi len xe', { align: 'center' })
+          .moveDown(0.3)
+          .text(
+            `Ngay in: ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN')}`,
+            { align: 'center' },
+          )
+          .moveDown(0.5)
+          .fontSize(8)
+          .text('Cam on quy khach da su dung dich vu CHECK!T OUT', {
+            align: 'center',
+          });
+
+        doc.end();
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 }
