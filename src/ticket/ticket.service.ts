@@ -1006,6 +1006,41 @@ export class TicketService {
   /**
    * Get revenue analytics by scheduling
    */
+  async getSellerTicketStats() {
+    const [
+      successTickets,
+      pendingCount,
+      failedCount,
+      transferCount,
+      totalCount,
+    ] = await Promise.all([
+      this.ticketModel.find({ status: TicketStatus.SUCCESS }).exec(),
+      this.ticketModel.countDocuments({ status: TicketStatus.PENDING }).exec(),
+      this.ticketModel.countDocuments({ status: TicketStatus.FAILED }).exec(),
+      this.ticketModel.countDocuments({ status: TicketStatus.TRANSFER }).exec(),
+      this.ticketModel.countDocuments().exec(),
+    ]);
+
+    const totalIncome = successTickets.reduce(
+      (sum, ticket) => sum + ticket.totalPrice,
+      0,
+    );
+    const successCount = successTickets.length;
+    const averagePrice = successCount > 0 ? totalIncome / successCount : 0;
+
+    return {
+      totalIncome,
+      ticketCount: totalCount,
+      averagePrice: Math.round(averagePrice * 100) / 100,
+      ticketsByStatus: {
+        pending: pendingCount,
+        success: successCount,
+        failed: failedCount,
+        transfer: transferCount,
+      },
+    };
+  }
+
   async getRevenueByScheduling(schedulingId: string) {
     const tickets = await this.ticketModel
       .find({
@@ -1242,9 +1277,13 @@ export class TicketService {
 
     // Build filter object
     const filter: any = {
-      status: status || TicketStatus.SUCCESS,
       ...dateFilter,
     };
+
+    // Only add status filter if explicitly provided
+    if (status) {
+      filter.status = status;
+    }
 
     if (paymentMethod) {
       filter.paymentMethod = paymentMethod;

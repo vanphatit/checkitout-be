@@ -171,6 +171,28 @@ export class UsersController {
   }
 
   // Admin only endpoints
+  @ApiOperation({ summary: 'Get user statistics (Admin only)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User statistics retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        total: { type: 'number', example: 150 },
+        activeCount: { type: 'number', example: 120 },
+        pendingCount: { type: 'number', example: 25 },
+        sellerCount: { type: 'number', example: 10 },
+      },
+    },
+  })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @Get('stats')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN)
+  async getUserStats() {
+    return this.usersService.getUserStats();
+  }
+
   @ApiOperation({ summary: 'Get all users (Admin only)' })
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
   @ApiResponse({ status: 403, description: 'Access denied' })
@@ -255,6 +277,24 @@ export class UsersController {
       device: activity.device,
       createdAt: activity.createdAt!,
     }));
+  }
+
+  @ApiOperation({ summary: 'Get user by phone number (Admin and Seller only)' })
+  @ApiResponse({ status: 200, description: 'User retrieved successfully' })
+  @ApiResponse({ status: 403, description: 'Access denied' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  @Get('phone/:phone')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SELLER)
+  async getUserByPhone(
+    @Param('phone') phone: string,
+  ): Promise<UserResponseDto> {
+    const user = await this.usersService.findByPhone(phone);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.usersService.toResponseDto(user);
   }
 
   @ApiOperation({ summary: 'Get user by ID (Admin only)' })
