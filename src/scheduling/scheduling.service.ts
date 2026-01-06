@@ -6,6 +6,7 @@ import { Route, RouteDocument } from '../route/entities/route.entity';
 import { Bus, BusDocument } from '../bus/entities/bus.entity';
 import { CreateSchedulingDto, UpdateSchedulingDto, CreateBulkSchedulingDto } from './dto/scheduling.dto';
 import { SchedulingSearchService } from './services/scheduling-search.service';
+import { SchedulingQueueService } from './scheduling-queue.service';
 
 export interface BusConflict {
     busId: string;
@@ -38,6 +39,7 @@ export class SchedulingService {
         @InjectModel(Bus.name) private busModel: Model<BusDocument>,
         @Inject(forwardRef(() => SchedulingSearchService))
         private schedulingSearchService: SchedulingSearchService,
+        private schedulingQueueService: SchedulingQueueService,
     ) { }
 
     async create(createSchedulingDto: CreateSchedulingDto): Promise<CreateSchedulingResponse> {
@@ -98,6 +100,28 @@ export class SchedulingService {
             }
         }
 
+        // Calculate initial status based on departure/arrival times
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const departureDay = new Date(createSchedulingDto.departureDate);
+        departureDay.setHours(0, 0, 0, 0);
+        
+        const etdDate = this.combineDateAndTime(new Date(createSchedulingDto.departureDate), createSchedulingDto.etd);
+        const etaDate = eta && arrivalDate ? this.combineDateAndTime(new Date(arrivalDate), eta) : null;
+
+        let initialStatus = 'scheduled';
+        
+        // Nếu ngày khởi hành đã qua (không phải hôm nay) → completed
+        if (departureDay < today) {
+            initialStatus = 'completed';
+        }
+        // Nếu là hôm nay hoặc tương lai, check theo giờ
+        else if (etaDate && etaDate < now) {
+            initialStatus = 'completed';  // Đã qua giờ đến
+        } else if (etdDate < now) {
+            initialStatus = 'in-progress';  // Đã khởi hành, chưa đến
+        }
+
         const newScheduling = new this.schedulingModel({
             ...createSchedulingDto,
             routeId: new Types.ObjectId(createSchedulingDto.routeId),
@@ -109,6 +133,7 @@ export class SchedulingService {
             availableSeats: totalSeats,
             estimatedDuration: route.estimatedDuration,
             recurringEndDate: createSchedulingDto.recurringEndDate ? new Date(createSchedulingDto.recurringEndDate) : undefined,
+            status: initialStatus,
         });
 
         const saved = await newScheduling.save();
@@ -116,6 +141,25 @@ export class SchedulingService {
         // Log warnings if some buses were excluded
         if (conflicts.length > 0) {
             this.logger.warn(`Created scheduling with ${validBusIds.length}/${createSchedulingDto.busIds.length} buses. Conflicts: ${conflicts.map(c => c.message).join(', ')}`);
+        }
+
+        // Add delayed jobs for status transitions (only for future schedulings)
+        try {
+            if (saved.eta && initialStatus === 'scheduled') {
+                const etdDate = this.combineDateAndTime(saved.departureDate, saved.etd);
+                const etaDate = this.combineDateAndTime(saved.arrivalDate || saved.departureDate, saved.eta);
+
+                // Only add queue jobs if ETD is in the future
+                if (etdDate > now) {
+                    await this.schedulingQueueService.addSchedulingJobs(
+                        (saved._id as Types.ObjectId).toString(),
+                        etdDate,
+                        etaDate,
+                    );
+                }
+            }
+        } catch (error) {
+            this.logger.error(`Failed to add queue jobs for scheduling ${saved._id}:`, error);
         }
 
         // Index to Elasticsearch
@@ -364,6 +408,31 @@ export class SchedulingService {
             throw new NotFoundException('Không tìm thấy lịch trình');
         }
 
+        // Update queue jobs if ETD or ETA changed
+        try {
+            const hasTimeChange = updateSchedulingDto.etd || updateSchedulingDto.eta ||
+                updateSchedulingDto.departureDate || updateSchedulingDto.arrivalDate;
+
+            if (hasTimeChange && updatedScheduling.eta) {
+                const etdDate = this.combineDateAndTime(
+                    updatedScheduling.departureDate,
+                    updatedScheduling.etd
+                );
+                const etaDate = this.combineDateAndTime(
+                    updatedScheduling.arrivalDate || updatedScheduling.departureDate,
+                    updatedScheduling.eta
+                );
+
+                await this.schedulingQueueService.updateSchedulingJobs(
+                    (updatedScheduling._id as Types.ObjectId).toString(),
+                    etdDate,
+                    etaDate,
+                );
+            }
+        } catch (error) {
+            this.logger.error(`Failed to update queue jobs for scheduling ${id}:`, error);
+        }
+
         // Update in Elasticsearch
         try {
             await this.schedulingSearchService.updateScheduling(id, updatedScheduling);
@@ -403,6 +472,13 @@ export class SchedulingService {
 
         if (!result) {
             throw new NotFoundException('Không tìm thấy lịch trình');
+        }
+
+        // Remove queue jobs since scheduling is cancelled
+        try {
+            await this.schedulingQueueService.removeSchedulingJobs(id);
+        } catch (error) {
+            this.logger.error(`Failed to remove queue jobs for scheduling ${id}:`, error);
         }
 
         // Try to remove from Elasticsearch
@@ -614,10 +690,6 @@ export class SchedulingService {
             return { validBusIds: [], conflicts };
         }
 
-        if (validBuses.length === 0) {
-            return { validBusIds: [], conflicts };
-        }
-
         // Check if buses are available at the given time (check for time overlaps)
         const departureDate = new Date(date);
         departureDate.setHours(0, 0, 0, 0);
@@ -756,5 +828,21 @@ export class SchedulingService {
     private getDayName(dayIndex: number): string {
         const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
         return days[dayIndex];
+    }
+
+    /**
+     * Combine date and time into a single Date object
+     * @param date - Date object or date string (YYYY-MM-DD)
+     * @param time - Time string (HH:MM)
+     * @returns Combined Date object
+     */
+    private combineDateAndTime(date: Date | string, time: string): Date {
+        const dateObj = date instanceof Date ? date : new Date(date);
+        const [hours, minutes] = time.split(':').map(Number);
+
+        const combined = new Date(dateObj);
+        combined.setHours(hours, minutes, 0, 0);
+
+        return combined;
     }
 }

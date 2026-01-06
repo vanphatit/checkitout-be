@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { faker } from '@faker-js/faker';
 import { Scheduling } from '../../scheduling/entities/scheduling.entity';
+import { SchedulingService } from '../../scheduling/scheduling.service';
 
 /**
  * Service for creating additional schedulings specifically for today
@@ -14,6 +15,8 @@ export class SeederSchedulingDashboardService {
 
     constructor(
         @InjectModel(Scheduling.name) private schedulingModel: Model<Scheduling>,
+        @Inject(forwardRef(() => SchedulingService))
+        private schedulingService: SchedulingService,
     ) { }
 
     /**
@@ -38,12 +41,8 @@ export class SeederSchedulingDashboardService {
         const totalSchedulings = faker.number.int({ min: 10, max: 15 });
         this.logger.log(`🎯 Sẽ tạo ${totalSchedulings} schedulings cho hôm nay`);
 
-        // Status distribution for today: 40% scheduled, 30% in-progress, 30% completed
-        const statusWeights = [
-            { status: 'scheduled' as const, weight: 0.40 },
-            { status: 'in-progress' as const, weight: 0.30 },
-            { status: 'completed' as const, weight: 0.30 },
-        ];
+        let totalCreated = 0;
+        let totalConflicts = 0;
 
         for (let i = 0; i < totalSchedulings; i++) {
             try {
@@ -67,67 +66,27 @@ export class SeederSchedulingDashboardService {
 
                 const arrivalTime = `${arrivalDateTime.getHours().toString().padStart(2, '0')}:${arrivalDateTime.getMinutes().toString().padStart(2, '0')}`;
 
-                // Determine status based on current time
-                const now = new Date();
-                let status: 'scheduled' | 'in-progress' | 'completed';
-
-                if (departureDateTime > now) {
-                    status = 'scheduled';
-                } else if (arrivalDateTime < now) {
-                    status = 'completed';
-                } else {
-                    status = 'in-progress';
-                }
-
-                // For realistic distribution, override with weighted random
-                const statusRand = Math.random();
-                let cumulative = 0;
-                for (const sw of statusWeights) {
-                    cumulative += sw.weight;
-                    if (statusRand < cumulative) {
-                        status = sw.status;
-                        break;
-                    }
-                }
-
-                // Calculate seats
-                const totalSeats = bus.vacancy || bus.seats?.length || 0;
-                let bookedSeats = 0;
-
-                if (status === 'completed') {
-                    // Completed trips: high booking rate (70-100%)
-                    bookedSeats = faker.number.int({ min: Math.floor(totalSeats * 0.7), max: totalSeats });
-                } else if (status === 'in-progress') {
-                    // In-progress: medium booking rate (50-90%)
-                    bookedSeats = faker.number.int({ min: Math.floor(totalSeats * 0.5), max: Math.floor(totalSeats * 0.9) });
-                } else {
-                    // Scheduled: low to medium booking rate (0-60%)
-                    bookedSeats = faker.number.int({ min: 0, max: Math.floor(totalSeats * 0.6) });
-                }
-
-                const scheduling = new this.schedulingModel({
+                // Use SchedulingService.create() instead of direct DB creation
+                const result = await this.schedulingService.create({
                     routeId: route._id.toString(),
-                    busId: bus._id.toString(),
                     busIds: [bus._id.toString()],
                     etd: departureTime,
                     eta: arrivalTime,
-                    departureDate: departureDateTime,
-                    arrivalDate: arrivalDateTime,
+                    departureDate: today.toISOString().split('T')[0],
                     price: (route.basePrice || 100000) + faker.number.int({ min: -20000, max: 50000 }),
                     driver: {
                         name: faker.person.fullName(),
                         phone: this.generateVietnamesePhone(),
                         licenseNumber: faker.string.alphanumeric(10).toUpperCase(),
                     },
-                    status: status,
-                    availableSeats: Math.max(totalSeats - bookedSeats, 0),
-                    bookedSeats,
-                    estimatedDuration: durationInMinutes,
-                    isActive: true,
                 });
 
-                const saved = await scheduling.save();
-                schedulings.push(saved);
+                schedulings.push(result.scheduling);
+                totalCreated++;
+
+                if (result.conflicts && result.conflicts.length > 0) {
+                    totalConflicts += result.conflicts.length;
+                }
 
                 // Log progress every 5 schedulings
                 if ((i + 1) % 5 === 0) {
@@ -138,7 +97,7 @@ export class SeederSchedulingDashboardService {
             }
         }
 
-        this.logger.log(`✅ Đã tạo ${schedulings.length} schedulings cho hôm nay`);
+        this.logger.log(`✅ Đã tạo ${totalCreated} schedulings cho hôm nay (${totalConflicts} conflicts)`);
         this.logSchedulingDistribution(schedulings);
 
         return schedulings;

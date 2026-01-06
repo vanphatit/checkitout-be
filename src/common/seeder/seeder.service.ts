@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { faker } from '@faker-js/faker';
@@ -13,6 +13,7 @@ import { Promotion } from '../../promotion/entities/promotion.entity';
 import { Seat } from '../../seat/entities/seat.entity';
 import { Ticket } from '../../ticket/entities/ticket.entity';
 import { SchedulingSearchService } from '../../scheduling/services/scheduling-search.service';
+import { SchedulingService } from '../../scheduling/scheduling.service';
 import { SeederDashboardService } from './seeder-dashboard.service';
 import { SeederSchedulingDashboardService } from './seeder-scheduling-dashboard.service';
 
@@ -29,6 +30,8 @@ export class SeederService {
         @InjectModel(Seat.name) private seatModel: Model<Seat>,
         @InjectModel(Ticket.name) private ticketModel: Model<Ticket>,
         private schedulingSearchService: SchedulingSearchService,
+        @Inject(forwardRef(() => SchedulingService))
+        private schedulingService: SchedulingService,
         private seederDashboardService: SeederDashboardService,
         private seederSchedulingDashboardService: SeederSchedulingDashboardService,
     ) { }
@@ -1057,6 +1060,8 @@ export class SeederService {
     private async seedSchedulings(routes: any[], buses: any[]): Promise<any[]> {
         const schedulings: any[] = [];
         const today = new Date();
+        let totalCreated = 0;
+        let totalConflicts = 0;
 
         for (let dayOffset = 0; dayOffset < 30; dayOffset++) {
             const currentDate = new Date(today);
@@ -1074,10 +1079,8 @@ export class SeederService {
                 const durationInMinutes =
                     route.estimatedDuration || Math.floor((route.distance || 100) * 1.2);
 
-                const departureDateTime = new Date(currentDate);
-                departureDateTime.setHours(hours, minutes, 0, 0);
-
-                const arrivalDateTime = new Date(departureDateTime);
+                const arrivalDateTime = new Date(currentDate);
+                arrivalDateTime.setHours(hours, minutes, 0, 0);
                 arrivalDateTime.setMinutes(
                     arrivalDateTime.getMinutes() + durationInMinutes
                 );
@@ -1090,50 +1093,47 @@ export class SeederService {
                         .toString()
                         .padStart(2, '0')}`;
 
-                const totalSeats = bus.vacancy || bus.seats?.length || 0;
-                const bookedSeats = faker.number.int({
-                    min: 0,
-                    max: Math.floor(totalSeats * 0.8),
-                });
+                try {
+                    // Use SchedulingService.create() to trigger queue jobs
+                    const result = await this.schedulingService.create({
+                        routeId: route._id.toString(),
+                        busIds: [bus._id.toString()],
+                        etd: departureTime,
+                        eta: arrivalTime,
+                        departureDate: currentDate.toISOString().split('T')[0],
+                        price:
+                            (route.basePrice || 100000) +
+                            faker.number.int({ min: -20000, max: 50000 }),
+                        driver: {
+                            name: faker.person.fullName(),
+                            phone: this.generateVietnamesePhone(),
+                            licenseNumber: faker.string.alphanumeric(10).toUpperCase(),
+                        },
+                    });
 
-                const now = new Date();
-                let status: 'scheduled' | 'in-progress' | 'completed';
+                    schedulings.push(result.scheduling);
+                    totalCreated++;
 
-                if (departureDateTime > now) {
-                    status = 'scheduled';
-                } else if (arrivalDateTime < now) {
-                    status = 'completed';
-                } else {
-                    status = 'in-progress';
+                    if (result.conflicts && result.conflicts.length > 0) {
+                        totalConflicts += result.conflicts.length;
+                        this.logger.warn(
+                            `  ⚠️ Scheduling ${(result.scheduling as any)._id.toString()} created with ${result.conflicts.length} bus conflicts`
+                        );
+                    }
+
+                    // Log progress every 50 schedulings
+                    if (totalCreated % 50 === 0) {
+                        this.logger.log(`  📊 Progress: ${totalCreated} schedulings created...`);
+                    }
+                } catch (error) {
+                    this.logger.warn(
+                        `  ⚠️ Failed to create scheduling for ${currentDate.toISOString().split('T')[0]} ${departureTime}: ${error.message}`
+                    );
                 }
-
-                const scheduling = new this.schedulingModel({
-                    routeId: route._id.toString(),
-                    busId: bus._id.toString(),
-                    busIds: [bus._id.toString()],
-                    etd: departureTime,
-                    eta: arrivalTime,
-                    departureDate: departureDateTime,
-                    arrivalDate: arrivalDateTime,
-                    price:
-                        (route.basePrice || 100000) +
-                        faker.number.int({ min: -20000, max: 50000 }),
-                    driver: {
-                        name: faker.person.fullName(),
-                        phone: this.generateVietnamesePhone(),
-                        licenseNumber: faker.string.alphanumeric(10).toUpperCase(),
-                    },
-                    status: status,
-                    availableSeats: Math.max(totalSeats - bookedSeats, 0),
-                    bookedSeats,
-                    estimatedDuration: durationInMinutes,
-                    isActive: true,
-                });
-
-                schedulings.push(await scheduling.save());
             }
         }
 
+        this.logger.log(`✅ Scheduling seeding complete: ${totalCreated} created, ${totalConflicts} bus conflicts detected`);
         return schedulings;
     }
 
